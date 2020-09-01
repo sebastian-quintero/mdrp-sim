@@ -1,5 +1,8 @@
+haversine==2.3.0
 numpy==1.19.1
 pandas==1.1.1
+python-geohash==0.8.5
+simpy==4.0.1
 snowflake==0.0.3
 snowflake-connector-python==2.2.9
 snowflake-sqlalchemy==1.2.3

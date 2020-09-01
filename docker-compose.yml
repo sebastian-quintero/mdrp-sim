@@ -1,0 +1,11 @@
+---
+version: '3.7'
+
+services:
+  osrm_colombia:
+    image: colombia_osrm
+    build:
+      context: .
+      dockerfile: ./docker/colombia.dockerfile
+    ports:
+      - "5000:5000"

@@ -1,4 +1,4 @@
-order_id,pickup_lat,pickup_lng,delivery_lat,delivery_lng,placement_time,preparation_time,ready_time,drop_off_time
+order_id,pick_up_lat,pick_up_lng,drop_off_lat,drop_off_lng,placement_time,preparation_time,ready_time,expected_drop_off_time
 1,4.806918,-75.736006,4.8031277,-75.7379546,07:40:53,07:42:01,08:02:01,08:02:53
 2,4.809653,-75.678488,4.807341273763,-75.681938119233,07:48:32,07:49:14,07:59:14,08:18:32
 3,4.807934,-75.687068,4.8073224,-75.6896359,08:04:55,08:05:55,08:15:55,08:17:55

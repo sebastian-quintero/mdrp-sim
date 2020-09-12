@@ -1,85 +1,137 @@
 from dataclasses import dataclass, field
-from datetime import time
-from typing import Dict, Optional, Union, Any
+from datetime import time, datetime, date
+from typing import Dict, Optional
 
-from simpy import Environment, Process, Interrupt
+from simpy import Interrupt
 
 import settings
-from models.order import Order
-from models.route import Route
-from models.stop import Stop
-from policies.dispatcher.myopic_matching_policy import MyopicMatchingPolicy
-from policies.dispatcher.rolling_buffering_policy import RollingBufferingPolicy
-from policies.dispatcher.static_cancellation_policy import StaticCancellationPolicy
-from policies.policy import Policy
+from actors.actor import Actor
+from actors.courier import Courier
+from objects.notification import Notification
+from objects.order import Order
+from objects.route import Route
+from objects.stop import Stop
+from policies.dispatcher.buffering.dispatcher_buffering_policy import DispatcherBufferingPolicy
+from policies.dispatcher.buffering.rolling_horizon import RollingBufferingPolicy
+from policies.dispatcher.cancellation.dispatcher_cancellation_policy import DispatcherCancellationPolicy
+from policies.dispatcher.cancellation.static import StaticCancellationPolicy
+from policies.dispatcher.matching.dispatcher_matching_policy import DispatcherMatchingPolicy
+from policies.dispatcher.matching.greedy import GreedyMatchingPolicy
+from policies.dispatcher.prepositioning.dispatcher_prepositioning_policy import DispatcherPrepositioningPolicy
+from policies.dispatcher.prepositioning.naive import NaivePrepositioningPolicy
+from policies.dispatcher.prepositioning_timing.dispatcher_prepositioning_timing_policy import \
+    DispatcherPrepositioningTimingPolicy
+from policies.dispatcher.prepositioning_timing.fixed import FixedPrepositioningTimingPolicy
 from utils.datetime_utils import sec_to_time
 
 
 @dataclass
-class Dispatcher:
+class Dispatcher(Actor):
     """A class used to handle a dispatcher's state and events"""
 
-    env: Environment
-    cancellation_policy: Optional[Union[Policy, StaticCancellationPolicy]] = StaticCancellationPolicy()
-    dispatch_policy: Optional[Union[Policy, MyopicMatchingPolicy]] = MyopicMatchingPolicy()
-    order_buffering_policy: Optional[Union[Policy, RollingBufferingPolicy]] = RollingBufferingPolicy()
+    cancellation_policy: Optional[DispatcherCancellationPolicy] = StaticCancellationPolicy()
+    buffering_policy: Optional[DispatcherBufferingPolicy] = RollingBufferingPolicy()
+    matching_policy: Optional[DispatcherMatchingPolicy] = GreedyMatchingPolicy()
+    prepositioning_policy: Optional[DispatcherPrepositioningPolicy] = NaivePrepositioningPolicy()
+    prepositioning_timing_policy: Optional[DispatcherPrepositioningTimingPolicy] = FixedPrepositioningTimingPolicy()
 
     assigned_orders: Dict[int, Order] = field(default_factory=lambda: dict())
     canceled_orders: Dict[int, Order] = field(default_factory=lambda: dict())
     fulfilled_orders: Dict[int, Order] = field(default_factory=lambda: dict())
+    placed_orders: Dict[int, Order] = field(default_factory=lambda: dict())
     unassigned_orders: Dict[int, Order] = field(default_factory=lambda: dict())
 
-    idle_couriers: Dict[int, Any] = field(default_factory=lambda: dict())
-    busy_couriers: Dict[int, Any] = field(default_factory=lambda: dict())
-    available_couriers: Dict[int, Any] = field(default_factory=lambda: dict())
+    available_couriers: Dict[int, Courier] = field(default_factory=lambda: dict())
+    busy_couriers: Dict[int, Courier] = field(default_factory=lambda: dict())
+    idle_couriers: Dict[int, Courier] = field(default_factory=lambda: dict())
+    logged_off_couriers: Dict[int, Courier] = field(default_factory=lambda: dict())  # TODO: finish this logic
 
-    process: Optional[Process] = None
+    buffering_interval = buffering_policy.execute()
+    prepositioning_interval = prepositioning_timing_policy.execute()
 
-    def __post_init__(self):
-        """Immediately after the dispatcher is created, it starts simulating"""
+    def _idle_process(self):
+        """Process that simulates the dispatcher listening for events"""
 
-        self.process = self.env.process(self._simulate())
-
-    def _simulate(self):
-        """Process that simulates the dispatcher's actions'"""
+        self.state = 'listening'
+        self._log('Dispatcher is listening')
 
         while True:
             try:
-                yield self.env.timeout(delay=self.order_buffering_policy.execute())
-                # TODO: self._dispatch_event()
+                yield self.env.timeout(delay=self.buffering_interval)
+                self._dispatch_event()
+                yield self.env.timeout(delay=self.prepositioning_interval)
+                self._prepositioning_event()
 
             except Interrupt:
                 break
+
+    def _buffer_order_event(self, order: Order):
+        """Event detailing how the dispatcher receives an order and based on its schedule, buffers it"""
+
+        delay = (
+                datetime.combine(date.today(), order.preparation_time) -
+                datetime.combine(date.today(), order.placement_time)
+        ).total_seconds()
+        yield self.env.timeout(delay=delay)
+
+        del self.placed_orders[order.order_id]
+        self.unassigned_orders[order.order_id] = order
+
+        self._log(f'Dispatcher has moved the order {order.order_id} to the unassigned buffer')
 
     def _dispatch_event(self):
         """Event detailing how the dispatcher executes the dispatch instructions: routing & matching"""
 
         orders = self.unassigned_orders.values()
         couriers = {**self.idle_couriers, **self.available_couriers}
-        notifications = self.dispatch_policy.execute(orders, couriers.values())
+        self._log(f'Buffering time fulfilled, will dispatch {len(orders)} orders and {len(couriers)} couriers')
+
+        notifications = self.matching_policy.execute(orders=orders, couriers=couriers.values())
+        self._log(f'Dispatcher will send {len(notifications)} notifications')
 
         for notification in notifications:
-            couriers[notification.courier_id].notidy_event(notification.instruction)
+            if notification.instruction is not None and notification.courier is not None:
+                notification.type = 'pick up & drop off'
+                couriers[notification.courier.courier_id].notify_event(notification)
 
-        # TODO: complete this event
+    def _prepositioning_event(self):
+        """Event detailing how the dispatcher executes the preposition instructions, sending them to couriers"""
 
-    def evaluate_cancellation_event(self, order: Order, user):
+        self._log(f'Prepositioning time fulfilled, will consider {len(self.idle_couriers)} couriers for prepositioning')
+
+        notifications = self.prepositioning_policy.execute(
+            orders=self.placed_orders.values(),
+            couriers=self.idle_couriers.values()
+        )
+        self._log(f'Dispatcher will send {len(notifications)} prepositioning notifications')
+
+        for notification in notifications:
+            if notification.instruction is not None and notification.courier is not None:
+                notification.type = 'prepositioning'
+                self.idle_couriers[notification.courier.courier_id].notify_event(notification)
+
+    def evaluate_cancellation_event(self, order: Order):
         """Event detailing how the dispatcher decides to cancel an order"""
 
         yield self.env.timeout(delay=settings.DISPATCHER_WAIT_TO_CANCEL)
         should_cancel = self.cancellation_policy.execute(courier_id=order.courier_id)
 
         if should_cancel:
-            self.order_canceled_event(order, user)
+            self._log(f'Dispatcher decided to cancel the order {order.order_id}')
+            self.order_canceled_event(order)
 
     def order_submitted_event(self, order: Order, preparation_time: time, ready_time: time):
         """Event detailing how the dispatcher handles the submission of a new order"""
 
+        self._log(f'Dispatcher received the order {order.order_id} and moved it to the placed orders')
+
         order.preparation_time = preparation_time
         order.ready_time = ready_time
-        self.unassigned_orders[order.order_id] = order
+        self.placed_orders[order.order_id] = order
 
-    def order_canceled_event(self, order: Order, user):
+        yield self.env.process(self._buffer_order_event(order))
+
+    def order_canceled_event(self, order: Order):
         """Event detailing how the dispatcher handles a user cancelling an order"""
 
         if (
@@ -91,66 +143,97 @@ class Dispatcher:
             order.cancellation_time = sec_to_time(self.env.now)
             order.state = 'canceled'
             self.canceled_orders[order.order_id] = order
-            user.process.interrupt()
-            user.state = 'canceled'
+            order.user.process.interrupt()
+            order.user.state = 'canceled'
+
+        self._log(f'Dispatcher cancelled the order {order.order_id}')
 
     def orders_picked_up_event(self, orders: Dict[int, Order]):
         """Event detailing how the dispatcher handles a courier picking up an order"""
+
+        self._log(f'Dispatcher will set these orders to be picked up: {list(orders.keys())}')
 
         for order_id, order in orders.items():
             order.pick_up_time = sec_to_time(self.env.now)
             order.state = 'picked_up'
 
+        yield self.env.timeout(delay=1)
+
     def orders_dropped_off_event(self, orders: Dict[int, Order]):
         """Event detailing how the dispatcher handles the fulfillment of an order"""
+
+        self._log(f'Dispatcher will set these orders to be dropped off: {list(orders.keys())}')
 
         for order_id, order in orders.items():
             del self.assigned_orders[order_id]
             order.drop_off_time = sec_to_time(self.env.now)
             order.state = 'dropped_off'
+            order.user.state = 'dropped_off'
             self.fulfilled_orders[order_id] = order
 
-    def notification_accepted_event(self, instruction: Union[Route, Stop], courier):
+        yield self.env.timeout(delay=1)
+
+    def notification_accepted_event(self, notification: Notification, courier):
         """Event detailing how the dispatcher handles the acceptance of a notification by a courier"""
 
-        for order_id, order in instruction.orders.items():
+        # TODO: adjust to incorporate prepositioning logic
+
+        self._log(
+            f'Dispatcher will handle acceptance of orders {list(notification.instruction.orders.keys())} '
+            f'from courier {courier.courier_id} (state = {courier.state}). '
+            f'Instruction is a {"Route" if isinstance(notification.instruction, Route) else "Stop"}'
+        )
+
+        for order_id, order in notification.instruction.orders.items():
             del self.unassigned_orders[order_id]
+
             order.acceptance_time = sec_to_time(self.env.now)
             order.state = 'in_progress'
             order.courier_id = courier.courier_id
+
             self.assigned_orders[order_id] = order
 
-        print(f'sim time: {sec_to_time(self.env.now)} | state: {courier.state} | Courier accepted notification')
+        if courier.state == 'idle' and isinstance(notification.instruction, Route):
+            courier.active_route = notification.instruction
 
-        if courier.state == 'idle' and isinstance(instruction, Route):
-            courier.active_route = instruction
+        elif courier.state == 'picking_up' and isinstance(notification.instruction, Stop):
 
-        elif courier.state == 'picking_up' and isinstance(instruction, Stop):
-
-            for order_id, order in instruction.orders.items():
+            for order_id, order in notification.instruction.orders.items():
                 courier.active_route.orders[order_id] = order
                 courier.active_stop.orders[order_id] = order
 
             courier.active_route.stops.append(
                 Stop(
-                    location=instruction.location,
+                    location=notification.instruction.location,
                     position=len(courier.active_route.stops),
-                    orders=instruction.orders,
-                    type=instruction.type
+                    orders=notification.instruction.orders,
+                    type=notification.instruction.type
                 )
             )
 
-    def notification_rejected_event(self, instruction: Union[Route, Stop], courier):
+        yield self.env.timeout(delay=1)
+
+    def notification_rejected_event(self, notification: Notification, courier):
         """Event detailing how the dispatcher handles the rejection of a notification"""
 
-        for order_id, order in instruction.orders.items():
+        # TODO: adjust to incorporate prepositioning logic
+
+        self._log(
+            f'Dispatcher will handle rejection of orders {list(notification.instruction.orders.keys())} '
+            f'from courier {courier.courier_id} (state = {courier.state}). '
+            f'Instruction is a {"Route" if isinstance(notification.instruction, Route) else "Stop"}'
+        )
+
+        for order_id, order in notification.instruction.orders.items():
             order.rejected_by.append(courier.courier_id)
             courier.rejected_orders.append(order_id)
 
-        print(f'sim time: {sec_to_time(self.env.now)} | state: {courier.state} | Courier rejected notification')
+        yield self.env.timeout(delay=1)
 
     def courier_idle_event(self, courier):
         """Event detailing how the dispatcher handles setting a courier to idle"""
+
+        self._log(f'Dispatcher will set courier {courier.courier_id} to idle')
 
         if courier.courier_id in self.busy_couriers.keys():
             del self.busy_couriers[courier.courier_id]
@@ -160,16 +243,24 @@ class Dispatcher:
 
         self.idle_couriers[courier.courier_id] = courier
 
+        yield self.env.timeout(delay=1)
+
     def courier_available_event(self, courier):
-        """Event detailing how the dispatcher handles setting a courier to available"""
+        """Event detailing how the dispatcher handles setting a courier to available (can receive notifications)"""
+
+        self._log(f'Dispatcher will set courier {courier.courier_id} to available')
 
         if courier.state == 'picking_up' and courier.courier_id in self.idle_couriers.keys():
             del self.idle_couriers[courier.courier_id]
 
         self.available_couriers[courier.courier_id] = courier
 
+        yield self.env.timeout(delay=1)
+
     def courier_busy_event(self, courier):
         """Event detailing how the dispatcher handles setting a courier to busy"""
+
+        self._log(f'Dispatcher will set courier {courier.courier_id} to busy')
 
         if courier.courier_id in self.idle_couriers.keys():
             del self.idle_couriers[courier.courier_id]
@@ -178,3 +269,5 @@ class Dispatcher:
             del self.available_couriers[courier.courier_id]
 
         self.busy_couriers[courier.courier_id] = courier
+
+        yield self.env.timeout(delay=1)

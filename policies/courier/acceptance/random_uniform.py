@@ -1,21 +1,19 @@
 import random
+from typing import Generator, Any
 
 from simpy import Environment
 
 import settings
-from policies.policy import Policy
-from utils.datetime_utils import min_to_sec
+from policies.courier.acceptance.courier_acceptance_policy import CourierAcceptancePolicy
 
 
-class UniformAcceptancePolicy(Policy):
+class UniformAcceptancePolicy(CourierAcceptancePolicy):
     """
     Class containing the policy that decides how a courier evaluates accepting or rejecting a notification.
     It uses a Uniform Distribution to obtain the acceptance rate and a weighted probability to decide.
     """
 
-    ACCEPTANCE_CHOICES = [True, False]
-
-    def execute(self, acceptance_rate: float, env: Environment) -> bool:
+    def execute(self, acceptance_rate: float, env: Environment) -> Generator[Any, Any, bool]:
         """Execution of the Acceptance Policy"""
 
         yield env.timeout(delay=settings.COURIER_WAIT_TO_ACCEPT)

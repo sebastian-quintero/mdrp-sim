@@ -8,9 +8,9 @@ from simpy import Environment
 import settings
 from actors.dispatcher import Dispatcher
 from actors.user import User
-from models.location import Location
-from policies.user.random_cancellation_policy import RandomCancellationPolicy
-from tests.functional.actors.tests_dispatcher import TestsDispatcher
+from objects.location import Location
+from policies.user.cancellation.random import RandomCancellationPolicy
+from tests.functional.actors.tests_dispatcher import TestsDispatcher, DummyMatchingPolicy
 from utils.datetime_utils import min_to_sec
 
 
@@ -29,15 +29,18 @@ class TestsUser(unittest.TestCase):
     # Services to be reused
     cancellation_policy = RandomCancellationPolicy()
 
-    @patch('settings.DISPATCHER_WAIT_TO_CANCEL', min_to_sec(120))
+    @patch('settings.USER_WAIT_TO_CANCEL', min_to_sec(5))
     def test_submit_cancel_order(self, *args):
         """Test to verify how a user submits and decides to cancel an order"""
 
+        # Constants
         random.seed(666)
+        initial_time = 12 * 3600
+        time_delta = min_to_sec(10)
 
         # Services
-        env = Environment(initial_time=12 * 3600)
-        dispatcher = Dispatcher(env=env)
+        env = Environment(initial_time=initial_time)
+        dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
 
         # Create a user and have it submit an order immediately
         user = User(cancellation_policy=self.cancellation_policy, dispatcher=dispatcher, env=env)
@@ -52,7 +55,7 @@ class TestsUser(unittest.TestCase):
                 ready_time=self.ready_time
             )
         )
-        env.run(until=13 * 3600)
+        env.run(until=initial_time + time_delta)
 
         # Verify order is created and cancelled due to a courier not being assigned
         self.assertTrue(user.order)
@@ -63,7 +66,7 @@ class TestsUser(unittest.TestCase):
         self.assertEqual(
             user.order.cancellation_time,
             (
-                    datetime.combine(date.today(), self.placement_time) +
+                    datetime.combine(date.today(), self.preparation_time) +
                     timedelta(seconds=settings.USER_WAIT_TO_CANCEL)
             ).time()
         )
@@ -76,7 +79,7 @@ class TestsUser(unittest.TestCase):
 
         # Services
         env = Environment(initial_time=12 * 3600)
-        dispatcher = Dispatcher(env=env)
+        dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
 
         # Create a user, have it submit an order immediately and after some minutes, assign a courier
         user = User(cancellation_policy=self.cancellation_policy, dispatcher=dispatcher, env=env)
@@ -111,7 +114,7 @@ class TestsUser(unittest.TestCase):
 
         # Services
         env = Environment(initial_time=12 * 3600)
-        dispatcher = Dispatcher(env=env)
+        dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
 
         # Create a user and have it submit an order immediately
         user = User(cancellation_policy=self.cancellation_policy, dispatcher=dispatcher, env=env)

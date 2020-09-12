@@ -1,10 +1,10 @@
 import random
 
 import settings
-from policies.policy import Policy
+from policies.user.cancellation.user_cancellation_policy import UserCancellationPolicy
 
 
-class RandomCancellationPolicy(Policy):
+class RandomCancellationPolicy(UserCancellationPolicy):
     """Class containing the policy that decides how a user evaluates cancelling an order using a random probability"""
 
     def execute(self, courier_id: int) -> bool:

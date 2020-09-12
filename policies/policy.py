@@ -6,4 +6,5 @@ class Policy:
 
     def execute(self, *args, **kwargs) -> Any:
         """Implementation of the policy"""
+
         pass

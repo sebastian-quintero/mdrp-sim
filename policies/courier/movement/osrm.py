@@ -4,14 +4,14 @@ import requests
 from haversine import haversine
 from simpy import Environment
 
-from models.location import Location
-from models.route import Route
-from models.stop import Stop
-from policies.policy import Policy
-from utils.datetime_utils import sec_to_time
+from objects.location import Location
+from objects.route import Route
+from objects.stop import Stop
+from policies.courier.movement.courier_movement_policy import CourierMovementPolicy
+from utils.logging_utils import log
 
 
-class OSRMMovementPolicy(Policy):
+class OSRMMovementPolicy(CourierMovementPolicy):
     """
     Class containing the policy that implements the movement of a courier to a destination.
     It uses the Open Source Routing Machine with Open Street Maps.
@@ -27,12 +27,16 @@ class OSRMMovementPolicy(Policy):
         for ix in range(len(route.stops) - 1):
             stop = route.stops[ix]
             next_stop = route.stops[ix + 1]
+
             distance = haversine(stop.location.coordinates, next_stop.location.coordinates)
             time = int(distance / courier.vehicle.average_velocity)
-            print(f'sim time: {sec_to_time(env.now)} | state: {courier.state} | Courier will move from {stop.location} to {next_stop.location}')
+
+            log(env, 'Courier', courier.state, f'Courier {courier.courier_id} will move from {stop.location}')
+
             yield env.timeout(delay=time)
-            print(f'sim time: {sec_to_time(env.now)} | state: {courier.state} | Courier has moved, is now at {next_stop.location}')
             courier.location = next_stop.location
+
+            log(env, 'Courier', courier.state, f'Courier {courier.courier_id} has moved to {next_stop.location}')
 
     def _get_route(self, origin: Location, destination: Location) -> Route:
         """Method to obtain a movement route using docker-mounted OSRM"""

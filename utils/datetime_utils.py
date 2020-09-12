@@ -1,5 +1,6 @@
 import math
 from datetime import time
+from typing import Union
 
 
 def min_to_sec(minutes: float) -> float:
@@ -8,7 +9,7 @@ def min_to_sec(minutes: float) -> float:
     return minutes * 60
 
 
-def hour_to_sec(hours: float) -> float:
+def hour_to_sec(hours: float) -> Union[float, int]:
     """Convert hours to seconds"""
 
     return hours * 3600

@@ -85,7 +85,7 @@ This project is composed of the following directories:
 ├── actors
 ├── docker
 ├── instances
-├── models
+├── objects
 ├── policies
 ├── tests
 ├── utils
@@ -133,8 +133,8 @@ the `orders.csv` file contains information about all the orders processed during
 - ready_time: timestamp detailing when the order is ready to be picked up.
 - expected_drop_off_time: timestamp detailing when the order should be dropped off.
 
-### Models
-The different class models used for the MDRP can be found here, such as:
+### Objects
+The different class objects used for the MDRP can be found here, such as:
 
 - Order
 - Route

@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import List, Optional, Dict
 
-from models.order import Order
-from models.stop import Stop
+from objects.order import Order
+from objects.stop import Stop
 
 
 @dataclass

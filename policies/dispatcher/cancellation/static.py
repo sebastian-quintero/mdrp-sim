@@ -1,10 +1,7 @@
-import random
-
-import settings
-from policies.policy import Policy
+from policies.dispatcher.cancellation.dispatcher_cancellation_policy import DispatcherCancellationPolicy
 
 
-class StaticCancellationPolicy(Policy):
+class StaticCancellationPolicy(DispatcherCancellationPolicy):
     """Class containing the policy for the dispatcher evaluating cancelling an order using a static condition"""
 
     def execute(self, courier_id: int) -> bool:

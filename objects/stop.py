@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Optional, Dict
 
-from models.location import Location
-from models.order import Order
+from objects.location import Location
+from objects.order import Order
 
 
 @dataclass

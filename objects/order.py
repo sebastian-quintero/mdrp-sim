@@ -1,15 +1,12 @@
 import random
 from dataclasses import dataclass, field
 from datetime import time
-from typing import Optional, List
+from typing import Optional, List, Any
 
 from simpy import Environment
 
 import settings
-from models.location import Location
-from utils.datetime_utils import min_to_sec
-
-MIN_SERVICE_TIME = min_to_sec(2)
+from objects.location import Location
 
 
 @dataclass
@@ -24,6 +21,7 @@ class Order:
     rejected_by: List[int] = field(default_factory=lambda: list())
     pick_up_at: Location = None
     state: str = ''
+    user: Optional[Any] = None
 
     acceptance_time: Optional[time] = None
     cancellation_time: Optional[time] = None
@@ -39,6 +37,12 @@ class Order:
     def __post_init__(self):
         """Randomly assigns missing properties immediately after the order is created"""
 
-        self.pick_up_service_time = random.randint(MIN_SERVICE_TIME, settings.ORDER_MAX_PICK_UP_SERVICE_TIME)
-        self.drop_off_service_time = random.randint(MIN_SERVICE_TIME, settings.ORDER_MAX_DROP_OFF_SERVICE_TIME)
+        self.pick_up_service_time = random.randint(
+            settings.ORDER_MIN_SERVICE_TIME,
+            settings.ORDER_MAX_PICK_UP_SERVICE_TIME
+        )
+        self.drop_off_service_time = random.randint(
+            settings.ORDER_MIN_SERVICE_TIME,
+            settings.ORDER_MAX_DROP_OFF_SERVICE_TIME
+        )
         self.state = 'unassigned'

@@ -9,13 +9,16 @@ import settings
 from actors.courier import Courier
 from actors.dispatcher import Dispatcher
 from actors.user import User
-from models.location import Location
-from models.order import Order
-from models.route import Route
-from models.stop import Stop
-from policies.dispatcher.static_cancellation_policy import StaticCancellationPolicy
-from policies.user.random_cancellation_policy import RandomCancellationPolicy
-from utils.datetime_utils import min_to_sec
+from objects.location import Location
+from objects.notification import Notification
+from objects.order import Order
+from objects.route import Route
+from objects.stop import Stop
+from policies.dispatcher.buffering.rolling_horizon import RollingBufferingPolicy
+from policies.dispatcher.cancellation.static import StaticCancellationPolicy
+from policies.user.cancellation.random import RandomCancellationPolicy
+from tests.test_utils import mocked_get_route, DummyMatchingPolicy
+from utils.datetime_utils import min_to_sec, sec_to_time
 
 
 class TestsDispatcher(unittest.TestCase):
@@ -51,7 +54,11 @@ class TestsDispatcher(unittest.TestCase):
 
         # Services
         env = Environment(initial_time=12 * 3600)
-        dispatcher = Dispatcher(env=env, cancellation_policy=self.dispatcher_cancellation_policy)
+        dispatcher = Dispatcher(
+            env=env,
+            cancellation_policy=self.dispatcher_cancellation_policy,
+            matching_policy=DummyMatchingPolicy()
+        )
 
         # Create a user and have it submit an order immediately, avoiding user cancellation
         user = User(cancellation_policy=self.cancellation_policy, dispatcher=dispatcher, env=env)
@@ -77,7 +84,7 @@ class TestsDispatcher(unittest.TestCase):
         self.assertEqual(
             user.order.cancellation_time,
             (
-                    datetime.combine(date.today(), self.placement_time) +
+                    datetime.combine(date.today(), self.preparation_time) +
                     timedelta(seconds=settings.DISPATCHER_WAIT_TO_CANCEL + settings.USER_WAIT_TO_CANCEL)
             ).time()
         )
@@ -94,7 +101,11 @@ class TestsDispatcher(unittest.TestCase):
 
         # Services
         env = Environment(initial_time=12 * 3600)
-        dispatcher = Dispatcher(env=env, cancellation_policy=self.dispatcher_cancellation_policy)
+        dispatcher = Dispatcher(
+            env=env,
+            cancellation_policy=self.dispatcher_cancellation_policy,
+            matching_policy=DummyMatchingPolicy()
+        )
 
         # Create a user, have it submit an order immediately and after some minutes, assign a courier.
         # Courier is assigned after user cancellation time has expired
@@ -110,7 +121,6 @@ class TestsDispatcher(unittest.TestCase):
                 ready_time=self.ready_time
             )
         )
-        env.timeout(delay=settings.USER_WAIT_TO_CANCEL + min_to_sec(6))
         env.process(self.assign_courier(user, env, dispatcher))
         env.run(until=13 * 3600)
 
@@ -127,17 +137,18 @@ class TestsDispatcher(unittest.TestCase):
 
         # Constants
         initial_time = 15 * 3600
+        placement_time = time(15, 0, 0)
         preparation_time = time(15, 1, 0)
         ready_time = time(15, 15, 0)
 
         # Services
         env = Environment(initial_time=initial_time)
-        dispatcher = Dispatcher(env=env)
+        dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
 
         # Creates an order and submits it to the dispatcher
-        order = Order(env=env, order_id=32)
-        yield env.process(dispatcher.order_submitted_event(order, preparation_time, ready_time))
-        env.run(until=initial_time + 3600)
+        order = Order(env=env, order_id=32, placement_time=placement_time)
+        env.process(dispatcher.order_submitted_event(order, preparation_time, ready_time))
+        env.run(until=initial_time + 121)
 
         # Verify order properties are set and it is correctly allocated
         self.assertEqual(order.preparation_time, preparation_time)
@@ -152,16 +163,16 @@ class TestsDispatcher(unittest.TestCase):
 
         # Services
         env = Environment(initial_time=initial_time)
-        dispatcher = Dispatcher(env=env)
+        dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
 
         # Creates an order and sends the picked up event
         order = Order(env=env, order_id=45)
-        yield env.process(dispatcher.orders_picked_up_event(orders={order.order_id: order}))
+        env.process(dispatcher.orders_picked_up_event(orders={order.order_id: order}))
         env.run(until=initial_time + 3600)
 
         # Verify order properties are modified
         self.assertEqual(order.state, 'picked_up')
-        self.assertEqual(order.pick_up_time, initial_time)
+        self.assertEqual(order.pick_up_time, sec_to_time(initial_time))
 
     def test_orders_dropped_off_event(self):
         """Test to verify the mechanics of orders being dropped off"""
@@ -171,17 +182,17 @@ class TestsDispatcher(unittest.TestCase):
 
         # Services
         env = Environment(initial_time=initial_time)
-        dispatcher = Dispatcher(env=env)
+        dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
 
         # Creates an order and sends the picked up event
-        order = Order(env=env, order_id=45)
+        order = Order(env=env, order_id=45, user=User(env=env))
         dispatcher.assigned_orders[order.order_id] = order
-        yield env.process(dispatcher.orders_dropped_off_event(orders={order.order_id: order}))
+        env.process(dispatcher.orders_dropped_off_event(orders={order.order_id: order}))
         env.run(until=initial_time + 3600)
 
         # Verify order properties are modified and it is allocated correctly
         self.assertEqual(order.state, 'dropped_off')
-        self.assertEqual(order.drop_off_time, initial_time)
+        self.assertEqual(order.drop_off_time, sec_to_time(initial_time))
         self.assertIn(order.order_id, dispatcher.fulfilled_orders.keys())
         self.assertEqual(dispatcher.assigned_orders, {})
 
@@ -193,7 +204,7 @@ class TestsDispatcher(unittest.TestCase):
 
         # Services
         env = Environment(initial_time=initial_time)
-        dispatcher = Dispatcher(env=env)
+        dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
 
         # Creates an instruction with an order, a courier and sends the accepted event
         order = Order(env=env, order_id=45)
@@ -206,14 +217,214 @@ class TestsDispatcher(unittest.TestCase):
         )
         dispatcher.unassigned_orders[order.order_id] = order
         courier = Courier(dispatcher=dispatcher, env=env, courier_id=89)
-        yield env.process(dispatcher.notification_accepted_event(instruction=instruction, courier=courier))
-        env.run(until=initial_time + 3600)
+        notification = Notification(
+            courier=courier,
+            instruction=instruction
+        )
+        env.process(dispatcher.notification_accepted_event(notification=notification, courier=courier))
+        env.run(until=initial_time + 600)
 
-        # Verify order and coureir properties are modified and it is allocated correctly
+        # Verify order and courier properties are modified and it is allocated correctly
         self.assertEqual(order.state, 'in_progress')
-        self.assertEqual(order.acceptance_time, initial_time)
+        self.assertEqual(order.acceptance_time, sec_to_time(initial_time))
         self.assertEqual(order.courier_id, courier.courier_id)
         self.assertIn(order.order_id, dispatcher.assigned_orders.keys())
         self.assertIsNotNone(courier.active_route)
         self.assertEqual(courier.active_route, instruction)
         self.assertEqual(dispatcher.unassigned_orders, {})
+
+    def test_notification_rejected_event(self):
+        """Test to verify the mechanics of a notification being rejected by a courier"""
+
+        # Constants
+        initial_time = 14 * 3600
+
+        # Services
+        env = Environment(initial_time=initial_time)
+        dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
+
+        # Creates an instruction with an order, a courier and sends the rejected event
+        order = Order(env=env, order_id=45)
+        instruction = Route(
+            stops=[
+                Stop(orders={order.order_id: order}, position=0),
+                Stop(orders={order.order_id: order}, position=1)
+            ],
+            orders={order.order_id: order}
+        )
+        dispatcher.unassigned_orders[order.order_id] = order
+        courier = Courier(dispatcher=dispatcher, env=env, courier_id=89)
+        notification = Notification(
+            courier=courier,
+            instruction=instruction
+        )
+        env.process(dispatcher.notification_rejected_event(notification=notification, courier=courier))
+        env.run(until=initial_time + 1800)
+
+        # Verify order and courier properties are modified and it is allocated correctly
+        self.assertEqual(order.state, 'unassigned')
+        self.assertIsNone(order.acceptance_time)
+        self.assertIsNone(order.courier_id)
+        self.assertIn(order.order_id, dispatcher.unassigned_orders.keys())
+        self.assertIsNone(courier.active_route)
+        self.assertIn(courier.courier_id, order.rejected_by)
+        self.assertIn(order.order_id, courier.rejected_orders)
+
+    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    def test_courier_idle_event(self, *args):
+        """Test to verifiy the mechanics of how a courier is set to idle by the dispatcher"""
+
+        # Constants
+        initial_time = 14 * 3600
+        courier_id = 85
+        time_delta = 600
+        random.seed(26)
+
+        # Verifies 3 test cases: when the courier is busy, available or idle.
+        # For each test case, assert the courier starts in a set and ends up in the idle set
+
+        # Test 1: courier is busy
+        env = Environment(initial_time=initial_time)
+        dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
+        courier = Courier(dispatcher=dispatcher, env=env, courier_id=courier_id)
+        dispatcher.busy_couriers = {courier.courier_id: courier}
+        dispatcher.courier_idle_event(courier)
+        env.run(until=initial_time + time_delta)
+        self.assertIn(courier.courier_id, dispatcher.idle_couriers.keys())
+        self.assertEqual(dispatcher.busy_couriers, {})
+        self.assertEqual(dispatcher.available_couriers, {})
+
+        # Test 2: courier is available
+        env = Environment(initial_time=initial_time)
+        dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
+        courier = Courier(dispatcher=dispatcher, env=env, courier_id=courier_id)
+        dispatcher.available_couriers = {courier.courier_id: courier}
+        dispatcher.courier_idle_event(courier)
+        env.run(until=initial_time + time_delta)
+        self.assertIn(courier.courier_id, dispatcher.idle_couriers.keys())
+        self.assertEqual(dispatcher.busy_couriers, {})
+        self.assertEqual(dispatcher.available_couriers, {})
+
+        # Test 3: courier is idle
+        env = Environment(initial_time=initial_time)
+        dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
+        courier = Courier(dispatcher=dispatcher, env=env, courier_id=courier_id)
+        dispatcher.idle_couriers = {courier.courier_id: courier}
+        dispatcher.courier_idle_event(courier)
+        env.run(until=initial_time + time_delta)
+        self.assertIn(courier.courier_id, dispatcher.idle_couriers.keys())
+        self.assertEqual(dispatcher.busy_couriers, {})
+        self.assertEqual(dispatcher.available_couriers, {})
+
+    def test_courier_available_event(self):
+        """Test to verify the mechanics of how the dispatcher sets a courier to available"""
+
+        # Constants
+        initial_time = 14 * 3600
+
+        # Services
+        env = Environment(initial_time=initial_time)
+        dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
+
+        # Creates a courier and sets it to the picking process
+        courier = Courier(dispatcher=dispatcher, env=env, courier_id=32)
+        dispatcher.idle_couriers = {courier.courier_id: courier}
+        env.process(courier._picking_up_process(service_time=600))
+        env.run(until=initial_time + 600)
+
+        # Verify courier properties are modified and it is allocated correctly
+        self.assertEqual(courier.state, 'picking_up')
+        self.assertIn(courier.courier_id, dispatcher.available_couriers.keys())
+        self.assertEqual(dispatcher.idle_couriers, {})
+
+    @patch('policies.courier.movement.osrm.OSRMMovementPolicy._get_route', side_effect=mocked_get_route)
+    def test_courier_busy_event(self, *args):
+        """Test to verify the mechanics of how the dispatcher sets a courier to busy"""
+
+        # Constants
+        initial_time = 14 * 3600
+        courier_id = 14
+        time_delta = 600
+
+        # Verifies 2 test cases for how the courier transitions to being busy
+        # For each test case, assert the courier starts in a set and ends up in the busy set
+
+        # Test 1: courier starts dropping off process
+        env = Environment(initial_time=initial_time)
+        dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
+        courier = Courier(dispatcher=dispatcher, env=env, courier_id=courier_id)
+        env.process(courier._dropping_off_process(service_time=60))
+        env.run(until=initial_time + time_delta)
+        self.assertEqual(courier.state, 'dropping_off')
+        self.assertEqual(dispatcher.busy_couriers, {courier.courier_id: courier})
+        self.assertEqual(dispatcher.idle_couriers, {})
+
+        # Test 2: courier start moving process
+        env = Environment(initial_time=initial_time)
+        dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
+        courier = Courier(
+            dispatcher=dispatcher,
+            env=env,
+            courier_id=courier_id,
+            location=Location(lat=4.690296, lng=-74.043929)
+        )
+        env.process(courier._move_process(destination=Location(lat=4.689697, lng=-74.055495)))
+        env.run(until=initial_time + time_delta)
+        self.assertEqual(courier.state, 'moving')
+        self.assertEqual(dispatcher.busy_couriers, {courier.courier_id: courier})
+        self.assertEqual(dispatcher.idle_couriers, {})
+
+    def test_buffer_event(self):
+        """Test to verify how the mechanics of the dispatcher buffering orders work"""
+
+        # Constants
+        initial_time = 16 * 3600
+        placement_time = time(16, 0, 0)
+        time_delta = min_to_sec(10)
+
+        # Verifies two test cases for how the dispatcher buffers orders
+        # For each test, assert the correct number of orders are buffered
+
+        # Test 1: schedules the submission of three orders and assert that only two are buffered
+        env = Environment(initial_time=initial_time)
+        dispatcher = Dispatcher(
+            env=env,
+            buffering_policy=RollingBufferingPolicy(),
+            matching_policy=DummyMatchingPolicy()
+        )
+        order_1 = Order(env=env, order_id=1, placement_time=placement_time)
+        order_2 = Order(env=env, order_id=2, placement_time=placement_time)
+        order_3 = Order(env=env, order_id=3, placement_time=placement_time)
+        env.process(
+            dispatcher.order_submitted_event(order_1, preparation_time=time(16, 0, 27), ready_time=time(16, 10, 0))
+        )
+        env.process(
+            dispatcher.order_submitted_event(order_2, preparation_time=time(16, 0, 43), ready_time=time(16, 10, 0))
+        )
+        env.process(
+            dispatcher.order_submitted_event(order_3, preparation_time=time(18, 0, 0), ready_time=time(18, 10, 0))
+        )
+        env.run(until=initial_time + time_delta)
+        self.assertEqual(len(dispatcher.unassigned_orders), 2)
+
+        # Test 2: schedules the submission of three orders and assert that all three orders are buffered
+        env = Environment(initial_time=initial_time)
+        dispatcher = Dispatcher(
+            env=env,
+            buffering_policy=RollingBufferingPolicy(),
+            matching_policy=DummyMatchingPolicy()
+        )
+        order_1 = Order(env=env, order_id=1, placement_time=placement_time)
+        order_2 = Order(env=env, order_id=2, placement_time=placement_time)
+        order_3 = Order(env=env, order_id=3, placement_time=placement_time)
+        env.process(
+            dispatcher.order_submitted_event(order_1, preparation_time=time(16, 0, 27), ready_time=time(16, 10, 0))
+        )
+        env.process(
+            dispatcher.order_submitted_event(order_2, preparation_time=time(16, 0, 43), ready_time=time(16, 10, 0))
+        )
+        env.process(
+            dispatcher.order_submitted_event(order_3, preparation_time=time(16, 4, 1), ready_time=time(16, 14, 0))
+        )
+        env.run(until=initial_time + time_delta)
+        self.assertEqual(len(dispatcher.unassigned_orders), 3)

@@ -44,7 +44,7 @@ class Dispatcher(Actor):
     available_couriers: Dict[int, Courier] = field(default_factory=lambda: dict())
     busy_couriers: Dict[int, Courier] = field(default_factory=lambda: dict())
     idle_couriers: Dict[int, Courier] = field(default_factory=lambda: dict())
-    logged_off_couriers: Dict[int, Courier] = field(default_factory=lambda: dict())  # TODO: finish this logic
+    logged_off_couriers: Dict[int, Courier] = field(default_factory=lambda: dict())
 
     buffering_interval = buffering_policy.execute()
     prepositioning_interval = prepositioning_timing_policy.execute()
@@ -159,7 +159,7 @@ class Dispatcher(Actor):
 
         yield self.env.timeout(delay=1)
 
-    def orders_dropped_off_event(self, orders: Dict[int, Order]):
+    def orders_dropped_off_event(self, orders: Dict[int, Order], courier: Courier):
         """Event detailing how the dispatcher handles the fulfillment of an order"""
 
         self._log(f'Dispatcher will set these orders to be dropped off: {list(orders.keys())}')
@@ -170,10 +170,12 @@ class Dispatcher(Actor):
             order.state = 'dropped_off'
             order.user.state = 'dropped_off'
             self.fulfilled_orders[order_id] = order
+            courier.fulfilled_orders.append(order_id)
+            courier.hourly_earnings[order.drop_off_time] = settings.COURIER_EARNINGS_PER_ORDER
 
         yield self.env.timeout(delay=1)
 
-    def notification_accepted_event(self, notification: Notification, courier):
+    def notification_accepted_event(self, notification: Notification, courier: Courier):
         """Event detailing how the dispatcher handles the acceptance of a notification by a courier"""
 
         # TODO: adjust to incorporate prepositioning logic
@@ -213,7 +215,7 @@ class Dispatcher(Actor):
 
         yield self.env.timeout(delay=1)
 
-    def notification_rejected_event(self, notification: Notification, courier):
+    def notification_rejected_event(self, notification: Notification, courier: Courier):
         """Event detailing how the dispatcher handles the rejection of a notification"""
 
         # TODO: adjust to incorporate prepositioning logic
@@ -230,7 +232,7 @@ class Dispatcher(Actor):
 
         yield self.env.timeout(delay=1)
 
-    def courier_idle_event(self, courier):
+    def courier_idle_event(self, courier: Courier):
         """Event detailing how the dispatcher handles setting a courier to idle"""
 
         self._log(f'Dispatcher will set courier {courier.courier_id} to idle')
@@ -245,7 +247,7 @@ class Dispatcher(Actor):
 
         yield self.env.timeout(delay=1)
 
-    def courier_available_event(self, courier):
+    def courier_available_event(self, courier: Courier):
         """Event detailing how the dispatcher handles setting a courier to available (can receive notifications)"""
 
         self._log(f'Dispatcher will set courier {courier.courier_id} to available')
@@ -257,7 +259,7 @@ class Dispatcher(Actor):
 
         yield self.env.timeout(delay=1)
 
-    def courier_busy_event(self, courier):
+    def courier_busy_event(self, courier: Courier):
         """Event detailing how the dispatcher handles setting a courier to busy"""
 
         self._log(f'Dispatcher will set courier {courier.courier_id} to busy')
@@ -269,5 +271,26 @@ class Dispatcher(Actor):
             del self.available_couriers[courier.courier_id]
 
         self.busy_couriers[courier.courier_id] = courier
+
+        yield self.env.timeout(delay=1)
+
+    def courier_log_off_event(self, courier: Courier):
+        """Event detailing how the dispatcher handles when a courier wants to log off"""
+
+        self._log(f'Dispatcher will set courier {courier.courier_id} to logged off')
+
+        courier.process.interrupt()
+        courier.state = 'logged_off'
+
+        if courier.courier_id in self.idle_couriers.keys():
+            del self.idle_couriers[courier.courier_id]
+
+        elif courier.courier_id in self.available_couriers.keys():
+            del self.available_couriers[courier.courier_id]
+
+        elif courier.courier_id in self.busy_couriers.keys():
+            del self.busy_couriers[courier.courier_id]
+
+        self.logged_off_couriers[courier.courier_id] = courier
 
         yield self.env.timeout(delay=1)

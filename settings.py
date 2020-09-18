@@ -7,7 +7,9 @@ VERBOSE_LOGS = True  # Enable / Disable specific (verbose) actor and policy logs
 COURIER_MIN_ACCEPTANCE_RATE = 0.3  # Minimum acceptance rate for any courier
 COURIER_MOVEMENT_PROBABILITY = 0.1  # Probability that a courier WILL move
 COURIER_WAIT_TO_MOVE = min_to_sec(10)  # Time [sec] that a courier waits before deciding to move
-COURIER_WAIT_TO_ACCEPT = 20  # time [sec] that a courier waits before accepting / rejecting a notification
+COURIER_WAIT_TO_ACCEPT = 20  # Time [sec] that a courier waits before accepting / rejecting a notification
+COURIER_EARNINGS_PER_ORDER = 3  # Money earned for dropping off an order
+COURIER_EARNINGS_PER_HOUR = 8  # Rate at which the courier can be compensated per hour
 
 DISPATCHER_WAIT_TO_CANCEL = min_to_sec(10)  # Time [sec] to cancel an order, after user wait
 DISPATCHER_ROLLING_HORIZON_TIME = min_to_sec(2)  # Time [sec] to buffer orders

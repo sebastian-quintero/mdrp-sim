@@ -1,9 +1,12 @@
 import random
 import time
+from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import List, Optional, Any
+from datetime import datetime, date
+from typing import List, Optional, Any, Dict
 
-from simpy import Interrupt
+from simpy import Interrupt, Event
+from simpy.events import NORMAL
 
 import settings
 from actors.actor import Actor
@@ -33,13 +36,22 @@ class Courier(Actor):
     active_route: Optional[Route] = None
     active_stop: Optional[Stop] = None
     courier_id: Optional[int] = None
-    earnings: Optional[float] = None  # TODO: implement earnings scheme
+    earnings: Optional[float] = None
+    fulfilled_orders: List[int] = field(default_factory=lambda: list())
+    hourly_earnings: Dict[Any, float] = field(default_factory=lambda: dict())
     location: Optional[Location] = None
+    log_off_event: Optional[Event] = None
+    on_time: time = None
+    off_time: time = None
     rejected_orders: List[int] = field(default_factory=lambda: list())
     vehicle: Optional[Vehicle] = Vehicle.MOTORCYCLE
 
-    on_time: time = None
-    off_time: time = None
+    def __post_init__(self):
+        """Immediately after the courier logs on, the log off is scheduled and it starts idling"""
+
+        self._log('Actor logged on')
+        self._schedule_log_off()
+        self.process = self.env.process(self._idle_process())
 
     def _idle_process(self):
         """Process that simulates a courier being idle / waiting"""
@@ -123,7 +135,7 @@ class Courier(Actor):
             yield self.env.process(self.dispatcher.orders_picked_up_event(orders=stop.orders))
 
         elif stop.type == 'drop_off':
-            yield self.env.process(self.dispatcher.orders_dropped_off_event(orders=stop.orders))
+            yield self.env.process(self.dispatcher.orders_dropped_off_event(orders=stop.orders, courier=self))
 
         stop.visited = True
 
@@ -164,6 +176,46 @@ class Courier(Actor):
         else:
             self._log(f'Courier {self.courier_id} decided not to move')
 
+    def _log_off_callback(self, event: Event):
+        """Callback detailing how a courier logs off of the system, ensuring earnings are calculated"""
+
+        self._log(f'Courier {self.courier_id} is going to log off')
+
+        self.earnings = self._calculate_earnings()
+        self.env.process(self.dispatcher.courier_log_off_event(courier=self))
+        event.succeed()
+        event.callbacks = []
+
+    def _schedule_log_off(self):
+        """Method that allows the courier to schedule the log off time"""
+
+        self.log_off_event = Event(env=self.env)
+        self.log_off_event.callbacks.append(self._log_off_callback)
+        log_off_delay = (
+                datetime.combine(date.today(), self.off_time) - datetime.combine(date.today(), self.on_time)
+        ).total_seconds()
+        self.env.schedule(event=self.log_off_event, priority=NORMAL, delay=log_off_delay)
+
+    def _calculate_earnings(self) -> float:
+        """Method to calculate earnings after the shift ends"""
+
+        earnings_per_hour = defaultdict(float)
+        for timestamp, earning in self.hourly_earnings.items():
+            earnings_per_hour[timestamp.hour] += earning
+
+        adjusted_earnings = {
+            hour: max(earning, settings.COURIER_EARNINGS_PER_HOUR)
+            for hour, earning in earnings_per_hour.items()
+        }
+
+        earnings = sum(adjusted_earnings.values())
+        self._log(
+            f'Courier {self.courier_id} received earnings of ${earnings} '
+            f'for {len(self.fulfilled_orders)} orders during the complete shift'
+        )
+
+        return earnings
+
     def notify_event(self, notification: Notification):
         """Event detailing how a courier handles a notification"""
 
@@ -193,9 +245,3 @@ class Courier(Actor):
 
             elif self.state == 'picking_up':
                 yield self.env.process(self._execute_active_route_process())
-
-    def log_off_event(self):
-        """Event detailing how a courier logs off of the system"""
-
-        # TODO: finish this event
-        yield self.env.timeout(delay=1)

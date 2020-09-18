@@ -11,7 +11,7 @@ from actors.user import User
 from objects.location import Location
 from policies.user.cancellation.random import RandomCancellationPolicy
 from tests.functional.actors.tests_dispatcher import TestsDispatcher, DummyMatchingPolicy
-from utils.datetime_utils import min_to_sec
+from utils.datetime_utils import min_to_sec, hour_to_sec
 
 
 class TestsUser(unittest.TestCase):
@@ -35,7 +35,7 @@ class TestsUser(unittest.TestCase):
 
         # Constants
         random.seed(666)
-        initial_time = 12 * 3600
+        initial_time = hour_to_sec(12)
         time_delta = min_to_sec(10)
 
         # Services
@@ -75,10 +75,11 @@ class TestsUser(unittest.TestCase):
     def test_submit_courier_assigned(self):
         """Test to verify how a user submits and order and doesn't cancel since a courier is assigned"""
 
+        # Constants
         random.seed(666)
 
         # Services
-        env = Environment(initial_time=12 * 3600)
+        env = Environment(initial_time=hour_to_sec(12))
         dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
 
         # Create a user, have it submit an order immediately and after some minutes, assign a courier
@@ -95,7 +96,7 @@ class TestsUser(unittest.TestCase):
             )
         )
         env.process(TestsDispatcher.assign_courier(user, env, dispatcher))
-        env.run(until=13 * 3600)
+        env.run(until=hour_to_sec(13))
 
         # Verify order is created but not cancelled because a courier was assigned
         self.assertTrue(user.order)
@@ -110,10 +111,11 @@ class TestsUser(unittest.TestCase):
     def test_submit_wait_for_order(self, *args):
         """Test to verify how a user submits an order but doesn't cancel even without courier, deciding to wait"""
 
+        # Constants
         random.seed(157)
 
         # Services
-        env = Environment(initial_time=12 * 3600)
+        env = Environment(initial_time=hour_to_sec(12))
         dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
 
         # Create a user and have it submit an order immediately
@@ -129,7 +131,7 @@ class TestsUser(unittest.TestCase):
                 ready_time=self.ready_time
             )
         )
-        env.run(until=13 * 3600)
+        env.run(until=hour_to_sec(13))
 
         # Verify order is created but not cancelled, disregarding the lack of a courier
         self.assertTrue(user.order)

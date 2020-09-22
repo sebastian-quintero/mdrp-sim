@@ -7,7 +7,7 @@ from simpy import Interrupt
 import settings
 from actors.actor import Actor
 from actors.courier import Courier
-from objects.notification import Notification
+from objects.notification import Notification, NotificationType
 from objects.order import Order
 from objects.route import Route
 from objects.stop import Stop
@@ -91,7 +91,7 @@ class Dispatcher(Actor):
 
         for notification in notifications:
             if notification.instruction is not None and notification.courier is not None:
-                notification.type = 'pick up & drop off'
+                notification.type = NotificationType.PICK_UP_DROP_OFF
                 couriers[notification.courier.courier_id].notify_event(notification)
 
     def _prepositioning_event(self):
@@ -107,7 +107,7 @@ class Dispatcher(Actor):
 
         for notification in notifications:
             if notification.instruction is not None and notification.courier is not None:
-                notification.type = 'prepositioning'
+                notification.type = NotificationType.PREPOSITIONING
                 self.idle_couriers[notification.courier.courier_id].notify_event(notification)
 
     def evaluate_cancellation_event(self, order: Order):
@@ -178,64 +178,75 @@ class Dispatcher(Actor):
     def notification_accepted_event(self, notification: Notification, courier: Courier):
         """Event detailing how the dispatcher handles the acceptance of a notification by a courier"""
 
-        # TODO: adjust to incorporate prepositioning logic
-
         self._log(
-            f'Dispatcher will handle acceptance of orders {list(notification.instruction.orders.keys())} '
-            f'from courier {courier.courier_id} (state = {courier.state}). '
-            f'Instruction is a {"Route" if isinstance(notification.instruction, Route) else "Stop"}'
+            f'Dispatcher will handle acceptance of a {notification.type.label} notification '
+            f'from courier {courier.courier_id} (state = {courier.state})'
         )
 
-        for order_id, order in notification.instruction.orders.items():
-            del self.unassigned_orders[order_id]
-
-            order.acceptance_time = sec_to_time(self.env.now)
-            order.state = 'in_progress'
-            order.courier_id = courier.courier_id
-
-            self.assigned_orders[order_id] = order
-
-        if courier.state == 'idle' and isinstance(notification.instruction, Route):
+        if notification.type == NotificationType.PREPOSITIONING:
             courier.active_route = notification.instruction
 
-        elif courier.state == 'picking_up' and isinstance(notification.instruction, Stop):
+        elif notification.type == NotificationType.PICK_UP_DROP_OFF:
+            self._log(
+                f'Dispatcher will handle acceptance of orders {list(notification.instruction.orders.keys())} '
+                f'from courier {courier.courier_id} (state = {courier.state}). '
+                f'Instruction is a {"Route" if isinstance(notification.instruction, Route) else "Stop"}'
+            )
 
             for order_id, order in notification.instruction.orders.items():
-                courier.active_route.orders[order_id] = order
-                courier.active_stop.orders[order_id] = order
+                del self.unassigned_orders[order_id]
 
-            courier.active_route.stops.append(
-                Stop(
-                    location=notification.instruction.location,
-                    position=len(courier.active_route.stops),
-                    orders=notification.instruction.orders,
-                    type=notification.instruction.type
+                order.acceptance_time = sec_to_time(self.env.now)
+                order.state = 'in_progress'
+                order.courier_id = courier.courier_id
+
+                self.assigned_orders[order_id] = order
+
+            if courier.state == 'idle' and isinstance(notification.instruction, Route):
+                courier.active_route = notification.instruction
+
+            elif courier.state == 'picking_up' and isinstance(notification.instruction, Stop):
+
+                for order_id, order in notification.instruction.orders.items():
+                    courier.active_route.orders[order_id] = order
+                    courier.active_stop.orders[order_id] = order
+
+                courier.active_route.stops.append(
+                    Stop(
+                        location=notification.instruction.location,
+                        position=len(courier.active_route.stops),
+                        orders=notification.instruction.orders,
+                        type=notification.instruction.type
+                    )
                 )
-            )
 
         yield self.env.timeout(delay=1)
 
     def notification_rejected_event(self, notification: Notification, courier: Courier):
         """Event detailing how the dispatcher handles the rejection of a notification"""
 
-        # TODO: adjust to incorporate prepositioning logic
-
         self._log(
-            f'Dispatcher will handle rejection of orders {list(notification.instruction.orders.keys())} '
-            f'from courier {courier.courier_id} (state = {courier.state}). '
-            f'Instruction is a {"Route" if isinstance(notification.instruction, Route) else "Stop"}'
+            f'Dispatcher will handle rejection of a {notification.type.label} notification '
+            f'from courier {courier.courier_id} (state = {courier.state})'
         )
 
-        for order_id, order in notification.instruction.orders.items():
-            order.rejected_by.append(courier.courier_id)
-            courier.rejected_orders.append(order_id)
+        if notification.type == NotificationType.PICK_UP_DROP_OFF:
+            self._log(
+                f'Dispatcher will handle rejection of orders {list(notification.instruction.orders.keys())} '
+                f'from courier {courier.courier_id} (state = {courier.state}). '
+                f'Instruction is a {"Route" if isinstance(notification.instruction, Route) else "Stop"}'
+            )
+
+            for order_id, order in notification.instruction.orders.items():
+                order.rejected_by.append(courier.courier_id)
+                courier.rejected_orders.append(order_id)
 
         yield self.env.timeout(delay=1)
 
-    def courier_idle_event(self, courier: Courier):
-        """Event detailing how the dispatcher handles setting a courier to idle"""
+    def courier_idle_busy_event(self, courier: Courier, state: str):
+        """Event detailing how the dispatcher handles setting a courier to idle or busy"""
 
-        self._log(f'Dispatcher will set courier {courier.courier_id} to idle')
+        self._log(f'Dispatcher will set courier {courier.courier_id} to {state}')
 
         if courier.courier_id in self.busy_couriers.keys():
             del self.busy_couriers[courier.courier_id]
@@ -243,7 +254,14 @@ class Dispatcher(Actor):
         elif courier.courier_id in self.available_couriers.keys():
             del self.available_couriers[courier.courier_id]
 
-        self.idle_couriers[courier.courier_id] = courier
+        elif courier.courier_id in self.idle_couriers.keys():
+            del self.idle_couriers[courier.courier_id]
+
+        if state == 'idle':
+            self.idle_couriers[courier.courier_id] = courier
+
+        elif state == 'busy':
+            self.busy_couriers[courier.courier_id] = courier
 
         yield self.env.timeout(delay=1)
 
@@ -256,21 +274,6 @@ class Dispatcher(Actor):
             del self.idle_couriers[courier.courier_id]
 
         self.available_couriers[courier.courier_id] = courier
-
-        yield self.env.timeout(delay=1)
-
-    def courier_busy_event(self, courier: Courier):
-        """Event detailing how the dispatcher handles setting a courier to busy"""
-
-        self._log(f'Dispatcher will set courier {courier.courier_id} to busy')
-
-        if courier.courier_id in self.idle_couriers.keys():
-            del self.idle_couriers[courier.courier_id]
-
-        elif courier.courier_id in self.available_couriers.keys():
-            del self.available_couriers[courier.courier_id]
-
-        self.busy_couriers[courier.courier_id] = courier
 
         yield self.env.timeout(delay=1)
 

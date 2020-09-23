@@ -86,7 +86,7 @@ class Dispatcher(Actor):
         couriers = {**self.idle_couriers, **self.available_couriers}
         self._log(f'Buffering time fulfilled, will dispatch {len(orders)} orders and {len(couriers)} couriers')
 
-        notifications = self.matching_policy.execute(orders=orders, couriers=couriers.values())
+        notifications = self.matching_policy.execute(orders=list(orders), couriers=list(couriers.values()))
         self._log(f'Dispatcher will send {len(notifications)} notifications')
 
         for notification in notifications:

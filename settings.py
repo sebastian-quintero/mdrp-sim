@@ -14,6 +14,8 @@ COURIER_EARNINGS_PER_HOUR = 8  # Rate at which the courier can be compensated pe
 DISPATCHER_WAIT_TO_CANCEL = min_to_sec(10)  # Time [sec] to cancel an order, after user wait
 DISPATCHER_ROLLING_HORIZON_TIME = min_to_sec(2)  # Time [sec] to buffer orders
 DISPATCHER_PREPOSITIONING_TIME = min_to_sec(13)  # Time [sec] to send prepositioning, after buffer time
+DISPATCHER_PROSPECTS_MAX_DISTANCE = 3  # Maximum distance [km] between a courier and a store to be considered prospect
+DISPATCHER_PROSPECTS_MAX_ORDERS = 3  # Maximum number of orders a courier can carry simultaneously
 
 ORDER_MAX_PICK_UP_SERVICE_TIME = min_to_sec(10)  # Maximum service time [sec] at the pick up location
 ORDER_MAX_DROP_OFF_SERVICE_TIME = min_to_sec(5)  # Maximum service time [sec] at the drop off location

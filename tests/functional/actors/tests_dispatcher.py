@@ -146,7 +146,7 @@ class TestsDispatcher(unittest.TestCase):
         dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
 
         # Creates an order and submits it to the dispatcher
-        order = Order(env=env, order_id=32, placement_time=placement_time)
+        order = Order(order_id=32, placement_time=placement_time)
         env.process(dispatcher.order_submitted_event(order, preparation_time, ready_time))
         env.run(until=initial_time + 121)
 
@@ -166,7 +166,7 @@ class TestsDispatcher(unittest.TestCase):
         dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
 
         # Creates an order and sends the picked up event
-        order = Order(env=env, order_id=45)
+        order = Order(order_id=45)
         env.process(dispatcher.orders_picked_up_event(orders={order.order_id: order}))
         env.run(until=initial_time + hour_to_sec(1))
 
@@ -188,7 +188,7 @@ class TestsDispatcher(unittest.TestCase):
         dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
 
         # Creates an order and sends the picked up event
-        order = Order(env=env, order_id=45, user=User(env=env))
+        order = Order(order_id=45, user=User(env=env))
         dispatcher.assigned_orders[order.order_id] = order
         courier = Courier(on_time=on_time, off_time=off_time)
         env.process(dispatcher.orders_dropped_off_event(orders={order.order_id: order}, courier=courier))
@@ -215,7 +215,7 @@ class TestsDispatcher(unittest.TestCase):
         dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
 
         # Creates an instruction with an order, a courier and sends the accepted event
-        order = Order(env=env, order_id=45)
+        order = Order(order_id=45)
         instruction = Route(
             stops=[
                 Stop(orders={order.order_id: order}, position=0),
@@ -255,7 +255,7 @@ class TestsDispatcher(unittest.TestCase):
         dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
 
         # Creates an instruction with an order, a courier and sends the rejected event
-        order = Order(env=env, order_id=45)
+        order = Order(order_id=45)
         instruction = Route(
             stops=[
                 Stop(orders={order.order_id: order}, position=0),
@@ -336,6 +336,7 @@ class TestsDispatcher(unittest.TestCase):
         initial_time = hour_to_sec(14)
         on_time = time(14, 0, 0)
         off_time = time(15, 0, 0)
+        service_time = min_to_sec(6)
 
         # Services
         env = Environment(initial_time=initial_time)
@@ -344,7 +345,11 @@ class TestsDispatcher(unittest.TestCase):
         # Creates a courier and sets it to the picking process
         courier = Courier(dispatcher=dispatcher, env=env, courier_id=32, on_time=on_time, off_time=off_time)
         dispatcher.idle_couriers = {courier.courier_id: courier}
-        env.process(courier._picking_up_process(service_time=600))
+        env.process(courier._picking_up_process(
+            orders={
+                21: Order(drop_off_service_time=service_time, ready_time=time(14, 20, 0))
+            }
+        ))
         env.run(until=initial_time + min_to_sec(10))
 
         # Verify courier properties are modified and it is allocated correctly
@@ -352,7 +357,7 @@ class TestsDispatcher(unittest.TestCase):
         self.assertIn(courier.courier_id, dispatcher.available_couriers.keys())
         self.assertEqual(dispatcher.idle_couriers, {})
 
-    @mock.patch('policies.courier.movement.osrm.OSRMMovementPolicy._get_route', side_effect=mocked_get_route)
+    @mock.patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
     def test_courier_busy_event(self, *args):
         """Test to verify the mechanics of how the dispatcher sets a courier to busy"""
 
@@ -362,6 +367,7 @@ class TestsDispatcher(unittest.TestCase):
         time_delta = min_to_sec(10)
         on_time = time(14, 0, 0)
         off_time = time(15, 0, 0)
+        service_time = min_to_sec(7)
 
         # Verifies 2 test cases for how the courier transitions to being busy
         # For each test case, assert the courier starts in a set and ends up in the busy set
@@ -370,7 +376,11 @@ class TestsDispatcher(unittest.TestCase):
         env = Environment(initial_time=initial_time)
         dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
         courier = Courier(dispatcher=dispatcher, env=env, courier_id=courier_id, on_time=on_time, off_time=off_time)
-        env.process(courier._dropping_off_process(service_time=60))
+        env.process(courier._dropping_off_process(
+            orders={
+                21: Order(drop_off_service_time=service_time, ready_time=time(12, 20, 0))
+            }
+        ))
         env.run(until=initial_time + time_delta)
         self.assertEqual(courier.state, 'dropping_off')
         self.assertEqual(dispatcher.busy_couriers, {courier.courier_id: courier})
@@ -411,9 +421,9 @@ class TestsDispatcher(unittest.TestCase):
             buffering_policy=RollingBufferingPolicy(),
             matching_policy=DummyMatchingPolicy()
         )
-        order_1 = Order(env=env, order_id=1, placement_time=placement_time)
-        order_2 = Order(env=env, order_id=2, placement_time=placement_time)
-        order_3 = Order(env=env, order_id=3, placement_time=placement_time)
+        order_1 = Order(order_id=1, placement_time=placement_time)
+        order_2 = Order(order_id=2, placement_time=placement_time)
+        order_3 = Order(order_id=3, placement_time=placement_time)
         env.process(
             dispatcher.order_submitted_event(order_1, preparation_time=time(16, 0, 27), ready_time=time(16, 10, 0))
         )
@@ -433,9 +443,9 @@ class TestsDispatcher(unittest.TestCase):
             buffering_policy=RollingBufferingPolicy(),
             matching_policy=DummyMatchingPolicy()
         )
-        order_1 = Order(env=env, order_id=1, placement_time=placement_time)
-        order_2 = Order(env=env, order_id=2, placement_time=placement_time)
-        order_3 = Order(env=env, order_id=3, placement_time=placement_time)
+        order_1 = Order(order_id=1, placement_time=placement_time)
+        order_2 = Order(order_id=2, placement_time=placement_time)
+        order_3 = Order(order_id=3, placement_time=placement_time)
         env.process(
             dispatcher.order_submitted_event(order_1, preparation_time=time(16, 0, 27), ready_time=time(16, 10, 0))
         )
@@ -488,7 +498,9 @@ class TestsDispatcher(unittest.TestCase):
             off_time=time(13, 0, 0)
         )
         courier.process.interrupt()
-        env.process(courier._dropping_off_process(service_time=service_time))
+        env.process(courier._dropping_off_process(
+            orders={21: Order(drop_off_service_time=service_time)}
+        ))
         env.run(until=initial_time + time_delta)
         self.assertEqual(dispatcher.idle_couriers, {})
         self.assertEqual(dispatcher.busy_couriers, {})
@@ -506,7 +518,11 @@ class TestsDispatcher(unittest.TestCase):
             off_time=time(13, 0, 0)
         )
         courier.process.interrupt()
-        env.process(courier._picking_up_process(service_time=service_time))
+        env.process(courier._picking_up_process(
+            orders={
+                21: Order(drop_off_service_time=service_time, ready_time=time(12, 20, 0))
+            }
+        ))
         env.run(until=initial_time + time_delta)
         self.assertEqual(dispatcher.idle_couriers, {})
         self.assertEqual(dispatcher.busy_couriers, {})

@@ -3,8 +3,6 @@ from dataclasses import dataclass, field
 from datetime import time
 from typing import Optional, List, Any
 
-from simpy import Environment
-
 import settings
 from objects.location import Location
 
@@ -12,8 +10,6 @@ from objects.location import Location
 @dataclass
 class Order:
     """A class used to handle an order's state and events"""
-
-    env: Environment
 
     order_id: Optional[int] = None
     courier_id: Optional[int] = None

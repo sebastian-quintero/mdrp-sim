@@ -82,7 +82,6 @@ class User(Actor):
         """Event detailing how a user submits an order"""
 
         order = Order(
-            env=self.env,
             order_id=order_id,
             pick_up_at=pick_up_at,
             drop_off_at=drop_off_at,

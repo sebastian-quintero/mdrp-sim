@@ -11,9 +11,9 @@ from simpy.events import NORMAL
 import settings
 from actors.actor import Actor
 from objects.location import Location
-from objects.notification import Notification
+from objects.notification import Notification, NotificationType
 from objects.route import Route
-from objects.stop import Stop
+from objects.stop import Stop, StopType
 from objects.vehicle import Vehicle
 from policies.courier.acceptance.courier_acceptance_policy import CourierAcceptancePolicy
 from policies.courier.acceptance.random_uniform import UniformAcceptancePolicy
@@ -60,7 +60,7 @@ class Courier(Actor):
         self._log(f'Courier {self.courier_id} begins idling')
 
         try:
-            yield self.env.process(self.dispatcher.courier_idle_event(courier=self))
+            yield self.env.process(self.dispatcher.courier_idle_busy_event(courier=self, state=self.state))
 
         except Interrupt:
             pass
@@ -101,7 +101,7 @@ class Courier(Actor):
         self.state = 'dropping_off'
         self._log(f'Courier {self.courier_id} begins drop off process')
 
-        yield self.env.process(self.dispatcher.courier_busy_event(courier=self))
+        yield self.env.process(self.dispatcher.courier_idle_busy_event(courier=self, state='busy'))
         yield self.env.timeout(delay=service_time)
 
         self._log(f'Courier {self.courier_id} finishes drop off process')
@@ -110,7 +110,7 @@ class Courier(Actor):
         """Process detailing how a courier moves to a destination"""
 
         self.state = 'moving'
-        yield self.env.process(self.dispatcher.courier_busy_event(courier=self))
+        yield self.env.process(self.dispatcher.courier_idle_busy_event(courier=self, state='busy'))
 
         yield self.env.process(
             self.movement_policy.execute(
@@ -127,14 +127,14 @@ class Courier(Actor):
         self.active_stop = stop
         self._log(f'Courier {self.courier_id} is at stop {self.active_stop}')
 
-        service_time = max(order.__getattribute__(f'{stop.type}_service_time') for order in stop.orders.values())
-        service_process = self._picking_up_process if stop.type == 'pick_up' else self._dropping_off_process
+        service_time = max(order.__getattribute__(f'{stop.type.label}_service_time') for order in stop.orders.values())
+        service_process = self._picking_up_process if stop.type == StopType.PICK_UP else self._dropping_off_process
         yield self.env.process(service_process(service_time))
 
-        if stop.type == 'pick_up':
+        if stop.type == StopType.PICK_UP:
             yield self.env.process(self.dispatcher.orders_picked_up_event(orders=stop.orders))
 
-        elif stop.type == 'drop_off':
+        elif stop.type == StopType.DROP_OFF:
             yield self.env.process(self.dispatcher.orders_dropped_off_event(orders=stop.orders, courier=self))
 
         stop.visited = True
@@ -151,7 +151,8 @@ class Courier(Actor):
                 self._log(f'Courier {self.courier_id} will move to next stop')
                 yield self.env.process(self._move_process(destination=stop.location))
 
-            yield self.env.process(self._execute_stop_process(stop))
+            if stop.type != StopType.PREPOSITION:
+                yield self.env.process(self._execute_stop_process(stop))
 
         self.active_route = None
         self.active_stop = None
@@ -171,7 +172,7 @@ class Courier(Actor):
             yield self.env.process(self._move_process(destination))
 
             self.state = 'idle'
-            self.dispatcher.courier_idle_event(courier=self)
+            self.dispatcher.courier_idle_busy_event(courier=self, state=self.state)
 
         else:
             self._log(f'Courier {self.courier_id} decided not to move')
@@ -219,7 +220,7 @@ class Courier(Actor):
     def notify_event(self, notification: Notification):
         """Event detailing how a courier handles a notification"""
 
-        self._log(f'Courier {self.courier_id} received a {notification.type} notification')
+        self._log(f'Courier {self.courier_id} received a {notification.type.label} notification')
         self.process.interrupt()
 
         accepts_notification = yield self.env.process(
@@ -227,17 +228,17 @@ class Courier(Actor):
         )
         acceptance_log = (
             f'The instruction has {len(notification.instruction.orders)} orders'
-            if notification.type == 'pick up & drop off'
+            if notification.type == NotificationType.PICK_UP_DROP_OFF
             else ''
         )
 
         if accepts_notification:
-            self._log(f'Courier {self.courier_id} accepted a {notification.type} notification. {acceptance_log}')
+            self._log(f'Courier {self.courier_id} accepted a {notification.type.label} notification. {acceptance_log}')
             yield self.env.process(self.dispatcher.notification_accepted_event(notification=notification, courier=self))
             yield self.env.process(self._execute_active_route_process())
 
         else:
-            self._log(f'Courier {self.courier_id} rejected a {notification.type} notification. {acceptance_log}')
+            self._log(f'Courier {self.courier_id} rejected a {notification.type.label} notification. {acceptance_log}')
             yield self.env.process(self.dispatcher.notification_rejected_event(notification=notification, courier=self))
 
             if self.state == 'idle':

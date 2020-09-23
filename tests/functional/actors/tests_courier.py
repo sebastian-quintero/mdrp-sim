@@ -11,10 +11,10 @@ from actors.courier import Courier
 from actors.dispatcher import Dispatcher
 from actors.user import User
 from objects.location import Location
-from objects.notification import Notification
+from objects.notification import Notification, NotificationType
 from objects.order import Order
 from objects.route import Route
-from objects.stop import Stop
+from objects.stop import Stop, StopType
 from objects.vehicle import Vehicle
 from policies.courier.acceptance.random_uniform import UniformAcceptancePolicy
 from policies.courier.movement.osrm import OSRMMovementPolicy
@@ -162,14 +162,14 @@ class TestsCourier(unittest.TestCase):
                     location=self.pick_up_at,
                     position=0,
                     orders={self.order_id: order},
-                    type='pick_up',
+                    type=StopType.PICK_UP,
                     visited=False
                 ),
                 Stop(
                     location=self.drop_off_at,
                     position=1,
                     orders={self.order_id: order},
-                    type='drop_off',
+                    type=StopType.DROP_OFF,
                     visited=False
                 )
             ]
@@ -242,14 +242,14 @@ class TestsCourier(unittest.TestCase):
                     location=self.pick_up_at,
                     position=0,
                     orders={self.order_id: order},
-                    type='pick_up',
+                    type=StopType.PICK_UP,
                     visited=False
                 ),
                 Stop(
                     location=self.drop_off_at,
                     position=1,
                     orders={self.order_id: order},
-                    type='drop_off',
+                    type=StopType.DROP_OFF,
                     visited=False
                 )
             ]
@@ -334,14 +334,14 @@ class TestsCourier(unittest.TestCase):
                         location=self.pick_up_at,
                         position=0,
                         orders={self.order_id: active_order},
-                        type='pick_up',
+                        type=StopType.PICK_UP,
                         visited=False
                     ),
                     Stop(
                         location=self.drop_off_at,
                         position=1,
                         orders={self.order_id: active_order},
-                        type='drop_off',
+                        type=StopType.DROP_OFF,
                         visited=False
                     )
                 ]
@@ -354,7 +354,7 @@ class TestsCourier(unittest.TestCase):
             location=new_order.drop_off_at,
             position=1,
             orders={new_order.order_id: new_order},
-            type='drop_off',
+            type=StopType.DROP_OFF,
             visited=False
         )
         notification = Notification(
@@ -452,14 +452,14 @@ class TestsCourier(unittest.TestCase):
                         location=self.pick_up_at,
                         position=0,
                         orders={self.order_id: active_order},
-                        type='pick_up',
+                        type=StopType.PICK_UP,
                         visited=False
                     ),
                     Stop(
                         location=self.drop_off_at,
                         position=1,
                         orders={self.order_id: active_order},
-                        type='drop_off',
+                        type=StopType.DROP_OFF,
                         visited=False
                     )
                 ]
@@ -472,7 +472,7 @@ class TestsCourier(unittest.TestCase):
             location=new_order.drop_off_at,
             position=1,
             orders={new_order.order_id: new_order},
-            type='drop_off',
+            type=StopType.DROP_OFF,
             visited=False
         )
         notification = Notification(
@@ -609,3 +609,109 @@ class TestsCourier(unittest.TestCase):
             courier_earnings,
             number_of_hours * settings.COURIER_EARNINGS_PER_HOUR
         )
+
+    @mock.patch('policies.courier.movement.osrm.OSRMMovementPolicy._get_route', side_effect=mocked_get_route)
+    @mock.patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.1)
+    def test_notify_prepositioning_event_accept_idle(self, osrm):
+        """Test to evaluate how a courier handles a prepositioning notification while being idle and accepts it"""
+
+        # Constants
+        random.seed(348)
+        initial_time = hour_to_sec(17)
+        time_delta = min_to_sec(10)
+        on_time = time(17, 0, 0)
+        off_time = time(17, 30, 0)
+
+        # Services
+        env = Environment(initial_time=initial_time)
+        dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
+
+        # Creates a courier with high acceptance rate and immediately send a prepositioning notification
+        courier = Courier(
+            acceptance_policy=self.acceptance_policy,
+            dispatcher=dispatcher,
+            env=env,
+            movement_evaluation_policy=self.movement_evaluation_policy,
+            movement_policy=self.movement_policy,
+            courier_id=self.courier_id,
+            vehicle=self.vehicle,
+            location=self.start_location,
+            acceptance_rate=0.99,
+            on_time=on_time,
+            off_time=off_time
+        )
+
+        instruction = Route(
+            orders=None,
+            stops=[
+                Stop(
+                    location=self.pick_up_at,
+                    position=0,
+                    orders=None,
+                    type=StopType.PREPOSITION,
+                    visited=False
+                )
+            ]
+        )
+        notification = Notification(courier=courier, instruction=instruction, type=NotificationType.PREPOSITIONING)
+        env.process(courier.notify_event(notification))
+        env.run(until=initial_time + time_delta)
+
+        # Asserts that the courier fulfilled the route and is at a different start location
+        self.assertIsNone(courier.active_route)
+        self.assertIsNone(courier.active_stop)
+        self.assertEqual(dispatcher.fulfilled_orders, {})
+        self.assertNotEqual(courier.location, self.start_location)
+        self.assertEqual(courier.state, 'idle')
+        self.assertIn(courier.courier_id, dispatcher.idle_couriers.keys())
+
+    @mock.patch('policies.courier.movement.osrm.OSRMMovementPolicy._get_route', side_effect=mocked_get_route)
+    @mock.patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    def test_notify_prepositioning_event_reject_idle(self, osrm):
+        """Test to evaluate how a courier handles a prepositioning notification while being idle and rejects it"""
+
+        # Constants
+        random.seed(672)
+        on_time = time(6, 0, 0)
+        off_time = time(8, 0, 0)
+
+        # Services
+        env = Environment(initial_time=hour_to_sec(6))
+        dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
+
+        # Creates a courier with low acceptance rate and immediately send a prepositioning notification
+        courier = Courier(
+            acceptance_policy=self.acceptance_policy,
+            dispatcher=dispatcher,
+            env=env,
+            movement_evaluation_policy=self.movement_evaluation_policy,
+            movement_policy=self.movement_policy,
+            courier_id=self.courier_id,
+            vehicle=self.vehicle,
+            location=self.start_location,
+            acceptance_rate=0.01,
+            on_time=on_time,
+            off_time=off_time
+        )
+        instruction = Route(
+            orders=None,
+            stops=[
+                Stop(
+                    location=self.pick_up_at,
+                    position=0,
+                    orders=None,
+                    type=StopType.PREPOSITION,
+                    visited=False
+                )
+            ]
+        )
+        notification = Notification(courier=courier, instruction=instruction, type=NotificationType.PREPOSITIONING)
+        env.process(courier.notify_event(notification))
+        env.run(until=hour_to_sec(7))
+
+        # Asserts that the courier didn't fulfill the route
+        self.assertIsNone(courier.active_route)
+        self.assertIsNone(courier.active_stop)
+        self.assertEqual(courier.location, self.start_location)
+        self.assertEqual(courier.state, 'idle')
+        self.assertIn(courier.courier_id, dispatcher.idle_couriers.keys())

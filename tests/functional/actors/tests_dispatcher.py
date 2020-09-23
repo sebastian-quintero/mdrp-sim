@@ -10,10 +10,10 @@ from actors.courier import Courier
 from actors.dispatcher import Dispatcher
 from actors.user import User
 from objects.location import Location
-from objects.notification import Notification
+from objects.notification import Notification, NotificationType
 from objects.order import Order
 from objects.route import Route
-from objects.stop import Stop
+from objects.stop import Stop, StopType
 from policies.dispatcher.buffering.rolling_horizon import RollingBufferingPolicy
 from policies.dispatcher.cancellation.static import StaticCancellationPolicy
 from policies.user.cancellation.random import RandomCancellationPolicy
@@ -301,7 +301,7 @@ class TestsDispatcher(unittest.TestCase):
         dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
         courier = Courier(dispatcher=dispatcher, env=env, courier_id=courier_id, on_time=on_time, off_time=off_time)
         dispatcher.busy_couriers = {courier.courier_id: courier}
-        dispatcher.courier_idle_event(courier)
+        dispatcher.courier_idle_busy_event(courier, state='idle')
         env.run(until=initial_time + time_delta)
         self.assertIn(courier.courier_id, dispatcher.idle_couriers.keys())
         self.assertEqual(dispatcher.busy_couriers, {})
@@ -312,7 +312,7 @@ class TestsDispatcher(unittest.TestCase):
         dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
         courier = Courier(dispatcher=dispatcher, env=env, courier_id=courier_id, on_time=on_time, off_time=off_time)
         dispatcher.available_couriers = {courier.courier_id: courier}
-        dispatcher.courier_idle_event(courier)
+        dispatcher.courier_idle_busy_event(courier, state='idle')
         env.run(until=initial_time + time_delta)
         self.assertIn(courier.courier_id, dispatcher.idle_couriers.keys())
         self.assertEqual(dispatcher.busy_couriers, {})
@@ -323,7 +323,7 @@ class TestsDispatcher(unittest.TestCase):
         dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
         courier = Courier(dispatcher=dispatcher, env=env, courier_id=courier_id, on_time=on_time, off_time=off_time)
         dispatcher.idle_couriers = {courier.courier_id: courier}
-        dispatcher.courier_idle_event(courier)
+        dispatcher.courier_idle_busy_event(courier, state='idle')
         env.run(until=initial_time + time_delta)
         self.assertIn(courier.courier_id, dispatcher.idle_couriers.keys())
         self.assertEqual(dispatcher.busy_couriers, {})
@@ -512,3 +512,59 @@ class TestsDispatcher(unittest.TestCase):
         self.assertEqual(dispatcher.busy_couriers, {})
         self.assertEqual(dispatcher.available_couriers, {})
         self.assertEqual(dispatcher.logged_off_couriers, {courier.courier_id: courier})
+
+    def test_prepositioning_notification_accepted_event(self):
+        """Test to verify the mechanics of a prepositioning notification being accepted by a courier"""
+
+        # Constants
+        initial_time = hour_to_sec(14)
+        on_time = time(14, 0, 0)
+        off_time = time(15, 0, 0)
+
+        # Services
+        env = Environment(initial_time=initial_time)
+        dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
+
+        # Creates a prepositioning notification, a courier and sends the accepted event
+        instruction = Route(
+            stops=[
+                Stop(position=0, type=StopType.PREPOSITION),
+                Stop(position=1, type=StopType.PREPOSITION)
+            ]
+        )
+        courier = Courier(dispatcher=dispatcher, env=env, courier_id=666, on_time=on_time, off_time=off_time)
+        notification = Notification(courier=courier, instruction=instruction, type=NotificationType.PREPOSITIONING)
+        env.process(dispatcher.notification_accepted_event(notification=notification, courier=courier))
+        env.run(until=initial_time + min_to_sec(10))
+
+        # Verify order and courier properties are modified and it is allocated correctly
+        self.assertIsNotNone(courier.active_route)
+        self.assertEqual(courier.active_route, instruction)
+
+    @mock.patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    def test_prepositioning_notification_rejected_event(self):
+        """Test to verify the mechanics of a prepositioning notification being rejected by a courier"""
+
+        # Constants
+        initial_time = hour_to_sec(14)
+        on_time = time(14, 0, 0)
+        off_time = time(15, 0, 0)
+
+        # Services
+        env = Environment(initial_time=initial_time)
+        dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
+
+        # Creates a prepositioning notification, a courier and sends the rejected event
+        instruction = Route(
+            stops=[
+                Stop(position=0, type=StopType.PREPOSITION),
+                Stop(position=1, type=StopType.PREPOSITION)
+            ]
+        )
+        courier = Courier(dispatcher=dispatcher, env=env, courier_id=981, on_time=on_time, off_time=off_time)
+        notification = Notification(courier=courier, instruction=instruction, type=NotificationType.PREPOSITIONING)
+        env.process(dispatcher.notification_rejected_event(notification=notification, courier=courier))
+        env.run(until=initial_time + min_to_sec(30))
+
+        # Verify order and courier properties are modified and it is allocated correctly
+        self.assertIsNone(courier.active_route)

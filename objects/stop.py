@@ -30,7 +30,7 @@ class Stop:
     """Class describing the stop of a route"""
 
     location: Optional[Location] = None
-    position: Optional[int] = 0
     orders: Optional[Dict[int, Order]] = None
+    position: Optional[int] = 0
     type: Optional[StopType] = StopType.PICK_UP
     visited: Optional[bool] = False

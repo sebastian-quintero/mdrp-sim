@@ -12,6 +12,7 @@ import settings
 from actors.actor import Actor
 from objects.location import Location
 from objects.notification import Notification, NotificationType
+from objects.order import Order
 from objects.route import Route
 from objects.stop import Stop, StopType
 from objects.vehicle import Vehicle
@@ -21,6 +22,7 @@ from policies.courier.movement.courier_movement_policy import CourierMovementPol
 from policies.courier.movement.osrm import OSRMMovementPolicy
 from policies.courier.movement_evaluation.courier_movement_evaluation_policy import CourierMovementEvaluationPolicy
 from policies.courier.movement_evaluation.geohash_neighbors import NeighborsMoveEvalPolicy
+from utils.datetime_utils import sec_to_time
 
 
 @dataclass
@@ -73,7 +75,7 @@ class Courier(Actor):
             except Interrupt:
                 break
 
-    def _picking_up_process(self, service_time: float):
+    def _picking_up_process(self, orders: Dict[int, Order]):
         """Process that simulates a courier picking up stuff at the pick up location"""
 
         self.state = 'picking_up'
@@ -87,7 +89,13 @@ class Courier(Actor):
 
         while True:
             try:
-                yield self.env.timeout(delay=service_time)
+                service_time = max(order.pick_up_service_time for order in orders.values())
+                latest_ready_time = max(order.ready_time for order in orders.values())
+                waiting_time = (
+                        datetime.combine(date.today(), latest_ready_time) -
+                        datetime.combine(date.today(), sec_to_time(self.env.now))
+                ).total_seconds()
+                yield self.env.timeout(delay=service_time + max(0, waiting_time))
                 break
 
             except Interrupt:
@@ -95,13 +103,15 @@ class Courier(Actor):
 
         self._log(f'Courier {self.courier_id} finishes pick up process')
 
-    def _dropping_off_process(self, service_time: float):
+    def _dropping_off_process(self, orders: Dict[int, Order]):
         """Process that simulates a courier dropping off stuff at the drop off location"""
 
         self.state = 'dropping_off'
         self._log(f'Courier {self.courier_id} begins drop off process')
 
         yield self.env.process(self.dispatcher.courier_idle_busy_event(courier=self, state='busy'))
+
+        service_time = max(order.drop_off_service_time for order in orders.values())
         yield self.env.timeout(delay=service_time)
 
         self._log(f'Courier {self.courier_id} finishes drop off process')
@@ -127,9 +137,8 @@ class Courier(Actor):
         self.active_stop = stop
         self._log(f'Courier {self.courier_id} is at stop {self.active_stop}')
 
-        service_time = max(order.__getattribute__(f'{stop.type.label}_service_time') for order in stop.orders.values())
         service_process = self._picking_up_process if stop.type == StopType.PICK_UP else self._dropping_off_process
-        yield self.env.process(service_process(service_time))
+        yield self.env.process(service_process(orders=stop.orders))
 
         if stop.type == StopType.PICK_UP:
             yield self.env.process(self.dispatcher.orders_picked_up_event(orders=stop.orders))

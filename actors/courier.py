@@ -16,13 +16,27 @@ from objects.order import Order
 from objects.route import Route
 from objects.stop import Stop, StopType
 from objects.vehicle import Vehicle
+from policies.courier.acceptance.absolute import AbsoluteAcceptancePolicy
 from policies.courier.acceptance.courier_acceptance_policy import CourierAcceptancePolicy
 from policies.courier.acceptance.random_uniform import UniformAcceptancePolicy
 from policies.courier.movement.courier_movement_policy import CourierMovementPolicy
 from policies.courier.movement.osrm import OSRMMovementPolicy
 from policies.courier.movement_evaluation.courier_movement_evaluation_policy import CourierMovementEvaluationPolicy
 from policies.courier.movement_evaluation.geohash_neighbors import NeighborsMoveEvalPolicy
+from policies.courier.movement_evaluation.still import StillMoveEvalPolicy
 from utils.datetime_utils import sec_to_time
+
+COURIER_ACCEPTANCE_POLICIES_MAP = {
+    'uniform': UniformAcceptancePolicy(),
+    'absolute': AbsoluteAcceptancePolicy()
+}
+COURIER_MOVEMENT_EVALUATION_POLICIES_MAP = {
+    'neighbors': NeighborsMoveEvalPolicy(),
+    'still': StillMoveEvalPolicy()
+}
+COURIER_MOVEMENT_POLICIES_MAP = {
+    'osrm': OSRMMovementPolicy()
+}
 
 
 @dataclass
@@ -51,7 +65,7 @@ class Courier(Actor):
     def __post_init__(self):
         """Immediately after the courier logs on, the log off is scheduled and it starts idling"""
 
-        self._log('Actor logged on')
+        self._log(f'Actor {self.courier_id} logged on')
         self._schedule_log_off()
         self.process = self.env.process(self._idle_process())
 

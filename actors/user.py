@@ -13,6 +13,10 @@ from policies.user.cancellation.random import RandomCancellationPolicy
 from policies.user.cancellation.user_cancellation_policy import UserCancellationPolicy
 from utils.datetime_utils import sec_to_time
 
+USER_CANCELLATION_POLICIES_MAP = {
+    'random': RandomCancellationPolicy()
+}
+
 
 @dataclass
 class User(Actor):
@@ -22,6 +26,13 @@ class User(Actor):
     cancellation_policy: Optional[UserCancellationPolicy] = RandomCancellationPolicy()
 
     order: Optional[Order] = None
+    user_id: Optional[int] = None
+
+    def __post_init__(self):
+        """Immediately after the actor is created, it starts idling"""
+
+        self.process = self.env.process(self._idle_process())
+        self._log(f'Actor {self.user_id} logged on')
 
     def _idle_process(self):
         """Process that simulates a user being idle"""
@@ -53,9 +64,9 @@ class User(Actor):
         """Event detailing how a user decides to cancel an order"""
 
         base_delay = abs((
-                datetime.combine(date.today(), self.order.preparation_time) -
-                datetime.combine(date.today(), sec_to_time(self.env.now))
-        ).total_seconds())
+                                 datetime.combine(date.today(), self.order.preparation_time) -
+                                 datetime.combine(date.today(), sec_to_time(self.env.now))
+                         ).total_seconds())
         yield self.env.timeout(delay=base_delay + settings.USER_WAIT_TO_CANCEL)
 
         should_cancel = self.cancellation_policy.execute(courier_id=self.order.courier_id)

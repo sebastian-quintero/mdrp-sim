@@ -99,16 +99,16 @@ The computational framework consists of a simulated environment.
 Discrete events simulation is used and these are the most important definitions:
 
 - Event: A sequence of items, facts, actions or changes triggered at a moment in time that follow a chronological order.
-- Process: Current state of an actor. Can also be defined as a sequence of events during a specific time interval.
 - Actor: Entity that makes decisions and executes actions (triggers events).
+- Process: Current state of an actor. Can also be defined as a sequence of events during a specific time interval.
 - Policy: Conditions and algorithms that describe how an actor makes a decision or executes an action.
-- Model: Passive entity used to represent an abstract object, person or place. Doesn't make decisions or execute actions.
+- Object: Passive entity used to represent an abstract object, person or place. Doesn't make decisions or execute actions.
 
 This framework allows for different policies to be tested, such as:
 
 - Dispatching (assignment + routing) policies
 - Movement (for couriers) policies
-- Fleet allocation policies
+- Fleet allocation (prepositioning) policies
 
 A short explanation of this repo's directories can be found.
 A more extended guide to get the project up and running is provided.
@@ -146,7 +146,7 @@ Here you can find the classes that handle the MDRP's actors states and events:
 - Dispatcher
 - User
 
-#### DataBase (DDBB)
+### DataBase (DDBB)
 All scripts and migrations necessary for the DDBB to work live here.
 
 ### Docker

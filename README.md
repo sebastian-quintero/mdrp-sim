@@ -1,8 +1,13 @@
 # mdrp-sim
 
 This is a Meal Delivery Routing Problem Simulator (hence the name).
+If you're in a hurry, check out:
+- [Quick Setup](#quick-setup)
+- [Quick Use](#quick-use)
 
-## TL; DR: Quick Setup
+If you have a bit more time on your hands, start reading from the [Intro](#intro) and work your way down. 
+
+## Quick Setup
 Let's do a lightning fast setup via terminal.
 
 First, install [python](https://www.python.org/) ([Anaconda](https://www.anaconda.com/) distribution recommended) and [Docker](https://www.docker.com/get-started).
@@ -18,18 +23,19 @@ export PYTHONPATH=.
 ```
 
 Third, let's use docker to mount the Database.
+
 ```bash
 docker pull postgres
 docker run -p 5432:5432 --name mdrp-sim-db-container -e POSTGRES_USER='docker' -e POSTGRES_PASSWORD='docker' -e POSTGRES_DB='mdrp_sim' -d postgres
 ```
 
-Fourth, let's use docker to mound the city routing ([OSRM](http://project-osrm.org/)) service (may take several minutes).
+Fourth, in a separate terminal, let's use docker to mount the city routing ([OSRM](http://project-osrm.org/)) service (may take several minutes).
 
 ```bash
 docker-compose up osrm_colombia
 ```
 
-Let's confirm the docker stuff is correctly set up with:
+Let's confirm the docker stuff is correctly set up (use the original terminal) with:
 
 ```bash
 docker ps
@@ -43,18 +49,48 @@ CONTAINER ID        IMAGE               COMMAND                  CREATED        
 edcc1aac43cb        colombia_osrm       "/bin/sh -c 'osrm-ro…"   3 days ago          Up 17 minutes       0.0.0.0:5000->5000/tcp   mdrp-sim_osrm_colombia_1
 ```
 
-Fifth, configure your environment variables in a `.env` file. 
-A sample `.env.example` file is provided. Export these env vars with (do this every time you change them):
+Fifth, set your project configurations in the `settings.py` file. 
+
+Sixth, create the necessary tables in your DDBB and load the instance data into them (may take several minutes):
 
 ```bash
-export $(cat your_dot_env_file | grep -v ^# | xargs)
+python3 ddbb/load_instances.py
 ```
 
-Sixth, and last, run a simulation with:
+If the terminal logs showed all instances were loaded to the DDBB and the connection was disposed, you're good to go.
+
+## Quick Use
+
+Stand in the root of the project.
+
+Fire up a terminal and do:
+
+````bash
+docker-compose up
+````
+
+Leave this terminal alone and open up a new one.
+
+Now, execute:
+
+```bash
+docker start mdrp-sim-db-container
+```
+
+To set the project's root as the `PYTHONPATH`, go ahead and type:
+
+```bash
+export PYTHONPATH=.
+```
+
+Finally, run the simulation with:
 
 ```bash
 python3 simulate.py
 ```
+
+Remember that all configurations for the simulation live in the `settings.py` file.
+
 
 ## Intro
 
@@ -83,18 +119,22 @@ This project is composed of the following directories:
 ```bash
 .
 ├── actors
+├── ddbb
 ├── docker
 ├── instances
 ├── objects
 ├── policies
+├── services
 ├── tests
 ├── utils
 ├── README.md
+├── alembic.ini
 ├── docker-compose.yml
 ├── requirements.txt
-└── settings.py
+├── settings.py
+└── simulate.py
 
-7 directories, 4 files
+9 directories, 6 files
 ```
 
 Let's dive into each directory.
@@ -105,6 +145,9 @@ Here you can find the classes that handle the MDRP's actors states and events:
 - Courier
 - Dispatcher
 - User
+
+#### DataBase (DDBB)
+All scripts and migrations necessary for the DDBB to work live here.
 
 ### Docker
 Files for managing docker stuff.
@@ -151,6 +194,10 @@ Some of the policies are:
 - Acceptance policy for the Courier
 - ...
 
+### Services
+Services for the simulator, such as the city routing service (OSRM) and the optimization service can be found here.
+These services may be used by policies or actors in different ways.
+
 ### Tests
 Suite of unit testing the code
 
@@ -159,7 +206,7 @@ Project's utils can be found here. From logging to mathematical auxiliary functi
 
 ## 2. Set up
 
-This section is an extension of the [TL; DR: Quick Setup](#tl-dr-quick-setup) section. 
+This section is an extension of the [Quick Setup](#quick-setup) section. 
 Please take your time to correctly set up the project.
 
 ### Python
@@ -292,3 +339,33 @@ a32029bf4010        postgres            "docker-entrypoint.s…"   7 months ago 
 ```
 
 If the container is running, cool! Postgresql is all set up!
+
+#### Migrations
+
+To interact with the DDBB for adding/removing schemas, tables and columns, a migration must be performed.
+
+First of all, let's make sure the `PYTHONPATH` is set correctly. Stand at the root of the project and run:
+
+```bash
+export PYTHONPATH=.
+```
+
+To check the current migrations you can run:
+
+```bash
+alembic history
+```
+
+To execute migrations manually you can run:
+
+```bash
+alembic upgrade head
+```
+
+To create a new migration automatically, you can run:
+
+```bash
+alembic revision --autogenerate -m "<migration_message>"
+```
+
+With this last command, a new file should've been generated at `./ddbb/versions/`.

@@ -24,6 +24,22 @@ from policies.dispatcher.prepositioning_timing.dispatcher_prepositioning_timing_
 from policies.dispatcher.prepositioning_timing.fixed import FixedPrepositioningTimingPolicy
 from utils.datetime_utils import sec_to_time
 
+DISPATCHER_CANCELLATION_POLICIES_MAP = {
+    'static': StaticCancellationPolicy()
+}
+DISPATCHER_BUFFERING_POLICIES_MAP = {
+    'rolling_horizon': RollingBufferingPolicy()
+}
+DISPATCHER_MATCHING_POLICIES_MAP = {
+    'greedy': GreedyMatchingPolicy()
+}
+DISPATCHER_PREPOSITIONING_POLICIES_MAP = {
+    'naive': NaivePrepositioningPolicy()
+}
+DISPATCHER_PREPOSITIONING_TIMING_POLICIES_MAP = {
+    'fixed': FixedPrepositioningTimingPolicy()
+}
+
 
 @dataclass
 class Dispatcher(Actor):

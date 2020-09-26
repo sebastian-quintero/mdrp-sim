@@ -24,45 +24,46 @@ class GreedyMatchingPolicy(DispatcherMatchingPolicy):
         estimations = self._get_estimations(orders, idle_couriers, prospects)
 
         notifications, notified_couriers = [], np.array([])
-        for order_ix, order in enumerate(orders):
-            mask = np.where(np.logical_and(
-                prospects[:, 0] == order_ix,
-                np.logical_not(np.isin(prospects[:, 1], notified_couriers))
-            ))
+        if bool(prospects.tolist()) and bool(estimations.tolist()) and bool(orders) and bool(idle_couriers):
+            for order_ix, order in enumerate(orders):
+                mask = np.where(np.logical_and(
+                    prospects[:, 0] == order_ix,
+                    np.logical_not(np.isin(prospects[:, 1], notified_couriers))
+                ))
 
-            if bool(mask[0].tolist()):
-                order_prospects = prospects[mask]
-                order_estimations = estimations[mask]
-                min_time = order_estimations['time'].min()
-                selection_mask = np.where(order_estimations['time'] == min_time)
-                selected_prospect = order_prospects[selection_mask][0]
+                if bool(mask[0].tolist()):
+                    order_prospects = prospects[mask]
+                    order_estimations = estimations[mask]
+                    min_time = order_estimations['time'].min()
+                    selection_mask = np.where(order_estimations['time'] == min_time)
+                    selected_prospect = order_prospects[selection_mask][0]
 
-                notifications.append(
-                    Notification(
-                        courier=couriers[selected_prospect[1]],
-                        type=NotificationType.PICK_UP_DROP_OFF,
-                        instruction=Route(
-                            orders={order.order_id: order},
-                            stops=[
-                                Stop(
-                                    location=order.pick_up_at,
-                                    orders={order.order_id: order},
-                                    position=0,
-                                    type=StopType.PICK_UP,
-                                    visited=False
-                                ),
-                                Stop(
-                                    location=order.drop_off_at,
-                                    orders={order.order_id: order},
-                                    position=1,
-                                    type=StopType.DROP_OFF,
-                                    visited=False
-                                )
-                            ]
+                    notifications.append(
+                        Notification(
+                            courier=couriers[selected_prospect[1]],
+                            type=NotificationType.PICK_UP_DROP_OFF,
+                            instruction=Route(
+                                orders={order.order_id: order},
+                                stops=[
+                                    Stop(
+                                        location=order.pick_up_at,
+                                        orders={order.order_id: order},
+                                        position=0,
+                                        type=StopType.PICK_UP,
+                                        visited=False
+                                    ),
+                                    Stop(
+                                        location=order.drop_off_at,
+                                        orders={order.order_id: order},
+                                        position=1,
+                                        type=StopType.DROP_OFF,
+                                        visited=False
+                                    )
+                                ]
+                            )
                         )
                     )
-                )
-                notified_couriers = np.append(notified_couriers, selected_prospect[1])
+                    notified_couriers = np.append(notified_couriers, selected_prospect[1])
 
         return notifications
 

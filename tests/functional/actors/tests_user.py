@@ -30,7 +30,8 @@ class TestsUser(unittest.TestCase):
     cancellation_policy = RandomCancellationPolicy()
 
     @patch('settings.USER_WAIT_TO_CANCEL', min_to_sec(5))
-    def test_submit_cancel_order(self, *args):
+    @patch('settings.USER_CANCELLATION_PROBABILITY', 0.99)
+    def test_submit_cancel_order(self):
         """Test to verify how a user submits and decides to cancel an order"""
 
         # Constants
@@ -44,20 +45,18 @@ class TestsUser(unittest.TestCase):
 
         # Create a user and have it submit an order immediately
         user = User(cancellation_policy=self.cancellation_policy, dispatcher=dispatcher, env=env)
-        env.process(
-            user.submit_order_event(
-                order_id=self.order_id,
-                pick_up_at=self.pick_up_at,
-                drop_off_at=self.drop_off_at,
-                placement_time=self.placement_time,
-                expected_drop_off_time=self.expected_drop_off_time,
-                preparation_time=self.preparation_time,
-                ready_time=self.ready_time
-            )
+        user.submit_order_event(
+            order_id=self.order_id,
+            pick_up_at=self.pick_up_at,
+            drop_off_at=self.drop_off_at,
+            placement_time=self.placement_time,
+            expected_drop_off_time=self.expected_drop_off_time,
+            preparation_time=self.preparation_time,
+            ready_time=self.ready_time
         )
         env.run(until=initial_time + time_delta)
 
-        # Verify order is created and cancelled due to a courier not being assigned
+        # Verify order is created and canceled due to a courier not being assigned
         self.assertTrue(user.order)
         self.assertIsNone(user.order.courier_id)
         self.assertIsNotNone(user.order.cancellation_time)
@@ -84,21 +83,19 @@ class TestsUser(unittest.TestCase):
 
         # Create a user, have it submit an order immediately and after some minutes, assign a courier
         user = User(cancellation_policy=self.cancellation_policy, dispatcher=dispatcher, env=env)
-        env.process(
-            user.submit_order_event(
-                order_id=self.order_id,
-                pick_up_at=self.pick_up_at,
-                drop_off_at=self.drop_off_at,
-                placement_time=self.placement_time,
-                expected_drop_off_time=self.expected_drop_off_time,
-                preparation_time=self.preparation_time,
-                ready_time=self.ready_time
-            )
+        user.submit_order_event(
+            order_id=self.order_id,
+            pick_up_at=self.pick_up_at,
+            drop_off_at=self.drop_off_at,
+            placement_time=self.placement_time,
+            expected_drop_off_time=self.expected_drop_off_time,
+            preparation_time=self.preparation_time,
+            ready_time=self.ready_time
         )
         env.process(TestsDispatcher.assign_courier(user, env, dispatcher))
         env.run(until=hour_to_sec(13))
 
-        # Verify order is created but not cancelled because a courier was assigned
+        # Verify order is created but not canceled because a courier was assigned
         self.assertTrue(user.order)
         self.assertIsNotNone(user.order.courier_id)
         self.assertIsNone(user.order.cancellation_time)
@@ -120,20 +117,18 @@ class TestsUser(unittest.TestCase):
 
         # Create a user and have it submit an order immediately
         user = User(cancellation_policy=self.cancellation_policy, dispatcher=dispatcher, env=env)
-        env.process(
-            user.submit_order_event(
-                order_id=self.order_id,
-                pick_up_at=self.pick_up_at,
-                drop_off_at=self.drop_off_at,
-                placement_time=self.placement_time,
-                expected_drop_off_time=self.expected_drop_off_time,
-                preparation_time=self.preparation_time,
-                ready_time=self.ready_time
-            )
+        user.submit_order_event(
+            order_id=self.order_id,
+            pick_up_at=self.pick_up_at,
+            drop_off_at=self.drop_off_at,
+            placement_time=self.placement_time,
+            expected_drop_off_time=self.expected_drop_off_time,
+            preparation_time=self.preparation_time,
+            ready_time=self.ready_time
         )
         env.run(until=hour_to_sec(13))
 
-        # Verify order is created but not cancelled, disregarding the lack of a courier
+        # Verify order is created but not canceled, disregarding the lack of a courier
         self.assertTrue(user.order)
         self.assertIsNone(user.order.courier_id)
         self.assertIsNone(user.order.cancellation_time)

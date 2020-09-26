@@ -1,7 +1,6 @@
-import math
 import random
 import unittest
-from datetime import time, datetime, date
+from datetime import time
 from unittest import mock
 
 from simpy import Environment
@@ -20,7 +19,7 @@ from policies.courier.acceptance.random_uniform import UniformAcceptancePolicy
 from policies.courier.movement.osrm import OSRMMovementPolicy
 from policies.courier.movement_evaluation.geohash_neighbors import NeighborsMoveEvalPolicy
 from tests.test_utils import DummyMatchingPolicy, mocked_get_route
-from utils.datetime_utils import min_to_sec, hour_to_sec
+from utils.datetime_utils import min_to_sec, hour_to_sec, sec_to_hour, time_diff
 
 
 class TestsCourier(unittest.TestCase):
@@ -80,6 +79,7 @@ class TestsCourier(unittest.TestCase):
 
     @mock.patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
     @mock.patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.95)
+    @mock.patch('settings.COURIER_WAIT_TO_MOVE', min_to_sec(7))
     def test_movement_process(self, osrm):
         """Test to evaluate how a courier moves with dummy movement"""
 
@@ -104,12 +104,12 @@ class TestsCourier(unittest.TestCase):
             on_time=on_time,
             off_time=off_time
         )
-        env.run(until=hour_to_sec(4))
+        env.run(until=hour_to_sec(4) + min_to_sec(5))
 
         # Asserts that the courier moved and is is in a different location
         self.assertEqual(courier.state, 'moving')
         self.assertNotEqual(courier.location, self.start_location)
-        self.assertIn(courier.courier_id, dispatcher.busy_couriers.keys())
+        self.assertIn(courier.courier_id, dispatcher.moving_couriers.keys())
 
     @mock.patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
     @mock.patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.1)
@@ -361,7 +361,7 @@ class TestsCourier(unittest.TestCase):
         courier.active_stop = courier.active_route.stops[0]
         courier.process = env.process(courier._picking_up_process(orders={active_order.order_id: active_order}))
         env.process(courier.notify_event(notification))
-        env.run(until=hour_to_sec(14))
+        env.run(until=hour_to_sec(13) + min_to_sec(12))
 
         # Asserts that the courier fulfilled the active and new order and is at a different start location
         self.assertIsNotNone(active_order.pick_up_time)
@@ -387,7 +387,7 @@ class TestsCourier(unittest.TestCase):
             }
         )
         self.assertEqual(courier.state, 'moving')
-        self.assertIn(courier.courier_id, dispatcher.busy_couriers.keys())
+        self.assertIn(courier.courier_id, dispatcher.moving_couriers.keys())
 
     @mock.patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
     @mock.patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
@@ -570,38 +570,17 @@ class TestsCourier(unittest.TestCase):
 
         # Test 1. Creates courier earnings to select the raw earnings from orders.
         # Asserts that these earnings are selected over the hourly earnings rate
-        courier.hourly_earnings = {
-            time(0, 10, 0): 2,
-            time(0, 20, 0): 3,
-            time(0, 30, 0): 4,
-            time(0, 40, 0): 5,
-            time(0, 50, 0): 6,
-            time(1, 10, 0): 10,
-            time(1, 30, 0): 12
-        }
-        courier_earnings = courier._calculate_earnings()
-        self.assertEqual(courier_earnings, sum(courier.hourly_earnings.values()))
+        courier.fulfilled_orders = [Order()] * 7
+        courier.earnings = courier._calculate_earnings()
+        self.assertEqual(courier.earnings, len(courier.fulfilled_orders) * settings.COURIER_EARNINGS_PER_ORDER)
 
         # Test 2. Creates courier earnings to select the hourly earnings rate.
         # Asserts that these earnings are selected over the order earnings
-        courier.hourly_earnings = {
-            time(0, 10, 0): 1,
-            time(0, 20, 0): 1,
-            time(0, 30, 0): 0.5,
-            time(0, 40, 0): 1,
-            time(0, 50, 0): 0.4,
-            time(1, 10, 0): 0.3,
-            time(1, 30, 0): 3
-        }
-        courier_earnings = courier._calculate_earnings()
-        number_of_hours = math.floor(
-            (
-                    datetime.combine(date.today(), off_time) - datetime.combine(date.today(), on_time)
-            ).total_seconds() / 3600
-        )
+        courier.fulfilled_orders = [Order()] * 2
+        courier.earnings = courier._calculate_earnings()
         self.assertEqual(
-            courier_earnings,
-            number_of_hours * settings.COURIER_EARNINGS_PER_HOUR
+            courier.earnings,
+            sec_to_hour(time_diff(courier.off_time, courier.on_time)) * settings.COURIER_EARNINGS_PER_HOUR
         )
 
     @mock.patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
@@ -719,7 +698,6 @@ class TestsCourier(unittest.TestCase):
         random.seed(290)
         on_time = time(6, 0, 0)
         off_time = time(8, 0, 0)
-        ready_time = time(6, 15, 0)
 
         # Services
         env = Environment(initial_time=hour_to_sec(6))
@@ -745,7 +723,7 @@ class TestsCourier(unittest.TestCase):
         dispatcher.process.interrupt()
 
         # Run until there are no more events and assert the courier experienced waiting time.
-        env.run()
+        env.run(until=hour_to_sec(7))
         self.assertTrue(order.pick_up_time >= time(6, int(order.ready_time.minute + order.pick_up_service_time / 60)))
 
         # For another test, if the order's ready time has expired, the courier doesn't experience waiting time
@@ -768,7 +746,7 @@ class TestsCourier(unittest.TestCase):
         stop = Stop(orders={order.order_id: order}, type=StopType.PICK_UP)
         env.process(courier._execute_stop_process(stop))
         dispatcher.process.interrupt()
-        env.run()
+        env.run(until=hour_to_sec(7))
         self.assertTrue(
             time(order.pick_up_time.hour, order.pick_up_time.minute) <= time(6, int(order.pick_up_service_time / 60))
         )

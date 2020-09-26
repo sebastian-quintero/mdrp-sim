@@ -4,7 +4,6 @@ from simpy import Environment
 from objects.location import Location
 from policies.courier.movement.courier_movement_policy import CourierMovementPolicy
 from services.osrm_service import OSRMService
-from utils.logging_utils import log
 
 
 class OSRMMovementPolicy(CourierMovementPolicy):
@@ -25,9 +24,6 @@ class OSRMMovementPolicy(CourierMovementPolicy):
             distance = haversine(stop.location.coordinates, next_stop.location.coordinates)
             time = int(distance / courier.vehicle.average_velocity)
 
-            log(env, 'Courier', courier.state, f'Courier {courier.courier_id} will move from {stop.location}')
-
             yield env.timeout(delay=time)
-            courier.location = next_stop.location
 
-            log(env, 'Courier', courier.state, f'Courier {courier.courier_id} has moved to {next_stop.location}')
+            courier.location = next_stop.location

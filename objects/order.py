@@ -24,6 +24,7 @@ class Order:
     drop_off_service_time: Optional[float] = None
     drop_off_time: Optional[time] = None
     expected_drop_off_time: Optional[time] = None
+    in_store_time: Optional[time] = None
     pick_up_time: Optional[time] = None
     pick_up_service_time: Optional[float] = None
     placement_time: time = None

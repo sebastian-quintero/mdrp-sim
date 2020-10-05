@@ -84,4 +84,4 @@ if __name__ == '__main__':
         logging.info(f'Instance {instance} | Successfully transferred couriers DF to SQL table.')
 
     connection.dispose()
-    logging.info('Successfully disposed of DDBB connection.')
+    logging.info('Successfully finished loading instances and disposed of DDBB connection.')

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Union, Optional, Any
+from typing import Union, Optional, Any, List
 
 from objects.route import Route
 from objects.stop import Stop
@@ -31,3 +31,8 @@ class Notification:
     courier: Optional[Any]
     instruction: Optional[Union[Route, Stop]]
     type: NotificationType = NotificationType.PICK_UP_DROP_OFF
+
+    def update(self, processed_order_ids: List[int]):
+        """Method to update a notification if some of its orders have been processed"""
+
+        self.instruction.update(processed_order_ids)

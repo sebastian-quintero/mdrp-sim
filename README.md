@@ -145,6 +145,7 @@ Here you can find the classes that handle the MDRP's actors states and events:
 - Courier
 - Dispatcher
 - User
+- World (passive actor that does not take actions and thus lacks policies, being used for orchestration only)
 
 ### DataBase (DDBB)
 All scripts and migrations necessary for the DDBB to work live here.

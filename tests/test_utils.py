@@ -15,7 +15,7 @@ class DummyMatchingPolicy(DispatcherMatchingPolicy):
     def execute(self, orders: Iterable[Order], couriers: Iterable[Courier]) -> List[Notification]:
         """Implementation of the dummy policy"""
 
-        return [Notification(courier=None, instruction=None)]
+        return []
 
 
 def mocked_get_route(origin: Location, destination: Location) -> Route:

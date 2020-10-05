@@ -5,7 +5,7 @@ from policies.user.cancellation.user_cancellation_policy import UserCancellation
 
 
 class RandomCancellationPolicy(UserCancellationPolicy):
-    """Class containing the policy that decides how a user evaluates cancelling an order using a random probability"""
+    """Class containing the policy that decides how a user evaluates canceling an order using a random probability"""
 
     def execute(self, courier_id: int) -> bool:
         """Execution of the Cancellation Policy"""

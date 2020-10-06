@@ -10,10 +10,10 @@ If you have a bit more time on your hands, start reading from the [Intro](#intro
 ## Quick Setup
 Let's do a lightning fast setup via terminal.
 
-First, install [python](https://www.python.org/) ([Anaconda](https://www.anaconda.com/) distribution recommended) and [Docker](https://www.docker.com/get-started).
+1 - Install [python](https://www.python.org/) ([Anaconda](https://www.anaconda.com/) distribution recommended) and [Docker](https://www.docker.com/get-started).
 Stand in the root of this project.
 
-Second, let's create a virtual environment for the project, install python requirements and make this the active python path.
+2 - Let's create a virtual environment for the project, install python requirements and make this the active python path.
 
 ```bash
 conda create -n mdrp-sim python=3.7
@@ -22,20 +22,20 @@ pip install -r requirements.txt
 export PYTHONPATH=.
 ```
 
-Third, let's use docker to mount the Database.
+3 - Let's use docker to mount the Database.
 
 ```bash
 docker pull postgres
 docker run -p 5432:5432 --name mdrp-sim-db-container -e POSTGRES_USER='docker' -e POSTGRES_PASSWORD='docker' -e POSTGRES_DB='mdrp_sim' -d postgres
 ```
 
-Fourth, in a separate terminal, let's use docker to mount the city routing ([OSRM](http://project-osrm.org/)) service (may take several minutes).
+4 - In a separate terminal, let's use docker to mount the city routing ([OSRM](http://project-osrm.org/)) service (may take several minutes).
 
 ```bash
 docker-compose up osrm_colombia
 ```
 
-Let's confirm the docker stuff is correctly set up (use the original terminal) with:
+5 - Let's confirm the docker stuff is correctly set up (use the original terminal) with:
 
 ```bash
 docker ps
@@ -49,9 +49,9 @@ CONTAINER ID        IMAGE               COMMAND                  CREATED        
 edcc1aac43cb        colombia_osrm       "/bin/sh -c 'osrm-ro…"   3 days ago          Up 17 minutes       0.0.0.0:5000->5000/tcp   mdrp-sim_osrm_colombia_1
 ```
 
-Fifth, set your project configurations in the `settings.py` file. 
+6 - Set your project configurations in the `settings.py` file. 
 
-Sixth, create the necessary tables in your DDBB and load the instance data into them (may take several minutes):
+7 - Create the necessary tables in your DDBB and load the instance data into them (may take several minutes):
 
 ```bash
 python3 ddbb/load_instances.py
@@ -63,34 +63,31 @@ If the terminal logs showed all instances were loaded to the DDBB and the connec
 
 Stand in the root of the project.
 
-Fire up a terminal and do:
+1 - Fire up two terminals. In the first one:
 
 ````bash
 docker-compose up
 ````
 
-Leave this terminal alone and open up a new one.
-
-Now, execute:
+2 - Open the second terminal an execute:
 
 ```bash
 docker start mdrp-sim-db-container
 ```
 
-To set the project's root as the `PYTHONPATH`, go ahead and type:
+Keep using the second terminal.
+
+3 - To set the project's root as the `PYTHONPATH`, go ahead and type:
 
 ```bash
 export PYTHONPATH=.
 ```
 
-Finally, run the simulation with:
+4 - Set desired params in the `settings.py` file and run the simulation with:
 
 ```bash
 python3 simulate.py
 ```
-
-Remember that all configurations for the simulation live in the `settings.py` file.
-
 
 ## Intro
 
@@ -104,12 +101,7 @@ Discrete events simulation is used and these are the most important definitions:
 - Policy: Conditions and algorithms that describe how an actor makes a decision or executes an action.
 - Object: Passive entity used to represent an abstract object, person or place. Doesn't make decisions or execute actions.
 
-This framework allows for different policies to be tested, such as:
-
-- Dispatching (assignment + routing) policies
-- Movement (for couriers) policies
-- Fleet allocation (prepositioning) policies
-
+This framework allows for different policies to be tested since the simulation groundwork is laid out agnostically.
 A short explanation of this repo's directories can be found.
 A more extended guide to get the project up and running is provided.
 
@@ -142,10 +134,77 @@ Let's dive into each directory.
 ### Actors
 Here you can find the classes that handle the MDRP's actors states and events:
 
+- User
 - Courier
 - Dispatcher
-- User
 - World (passive actor that does not take actions and thus lacks policies, being used for orchestration only)
+
+These are the events, processes and policies that can be tested for each actor and the corresponding state transition diagrams.
+
+#### User
+
+![User State Diagram](./utils/diagrams/user.png)
+
+- Events
+    - Submit order event: details how the user submits a new order.
+    - Evaluate cancellation event: details how the user evaluates if it should cancel an order (incorporates cancellation policy).
+    - Cancel order event: details the actions taken by a user to cancel an order.
+    - Order dropped off: details the actions taken by a user when the order is dropped off.
+
+- Processes
+    - Idle process: passive actor state before submitting a new order.
+    - Waiting process: state in which the user is waiting for the order to be dropped off.
+
+- Policies
+    - Cancellation policy: establishes how a user decides to cancel an order.
+    
+#### Courier
+
+![Courier State Diagram](./utils/diagrams/courier.png)
+
+- Events
+    - Evaluate movement event: details how the courier decides if it should move (incorporates the movement evaluation policy).
+    - Move event: details the actions taken by the courier to move somewhere (incorporates the moving process and movement policy).
+    - Notification event: details how a courier handles a new notification (incorporates the acceptance policy and subsequently the picking up and dropping off processes).
+    - Log off event: details how the courier logs off of the system (includes earnings calculations).
+
+- Processes
+    - Idle process: stand-by process of the courier. After moving and executing notifications, the courier always comes back to this process.
+    - Moving process: establishes how the courier moves from an origin to a destination.
+    - Picking up process: details the actions taken by a courier for picking up orders.
+    - Dropping off process: details the actions taken by a courier for dropping off orders.
+
+- Policies
+    - Movement evaluation policy: establishes how a courier decides if and where it wants to relocate.
+    - Movement policy: establishes how the courier moves about the city and between route stops.
+    - Acceptance policy: establishes how a courier decides to accept or reject a notification.
+    
+#### Dispatcher
+
+![Dispatcher State Diagram](./utils/diagrams/dispatcher.png)
+
+- Events
+    - Order submitted event: details how the dispatcher handles the submission of a new order.
+    - Buffer order event: details how the dispatcher buffers a newly created order.
+    - Evaluate cancellation event: details the actions taken by the dispatcher to consider canceling an order (incorporates the cancellation policy).
+    - Cancel order event: steps that the dispatcher takes to cancel an order.
+    - Evaluate buffering event: establishes how the dispatcher evaluates if it should keep buffering orders or rather flush the buffer (incorporates the buffering policy and triggers the dispatch event).
+    - Dispatch event: actions taken by the dispatcher to route and match orders and couriers (incorporates the matching policy and triggers the notification event).
+    - Notification event: notify pick up & drop off notifications or prepositioning notifications to couriers.
+    - Preposition event: actions taken by the dispatcher to preposition couriers (incorporates the prepositioning policy and triggers the notification event).
+    - Evaluate prepositioning event: details the actions taken by the dispatcher to consider executing a prepositioning cycle.
+    - Update / Control event: the dispatcher has the faculty of controlling an updating the system based on what is happening. As such, it is in charge of updating user, order and courier properties.
+
+- Processes
+    - Listening process: the sole process of the dispatcher, since the role of this actor is to react and coordinate system changes.
+
+- Policies
+    - Cancellation policy: establishes how the dispatcher decides to cancel an order.
+    - Buffering policy: establishes how the dispatcher buffers orders before dispatching them.
+    - Matching policy: establishes how the dispatcher executes routing and matching between orders and couriers.
+    - Prepositioning policy: establishes how the dispatcher executes prepositioning of couriers.
+    - Prepositioning evaluation: establishes how the dispatcher decides if prepositioning should be done and how often.
+
 
 ### DataBase (DDBB)
 All scripts and migrations necessary for the DDBB to work live here.
@@ -182,6 +241,7 @@ The different class objects used for the MDRP can be found here, such as:
 
 - Order
 - Route
+- Stop
 - Vehicle
 - ...
 
@@ -195,12 +255,14 @@ Some of the policies are:
 - Acceptance policy for the Courier
 - ...
 
+You can go back to the [Actors](#actors) for greater detail.
+
 ### Services
 Services for the simulator, such as the city routing service (OSRM) and the optimization service can be found here.
-These services may be used by policies or actors in different ways.
+These services may be used by policies or actors in different ways and provide complex functionality for some specific purpose.
 
 ### Tests
-Suite of unit testing the code
+Suite for unit testing the code
 
 ### Utils
 Project's utils can be found here. From logging to mathematical auxiliary functions.

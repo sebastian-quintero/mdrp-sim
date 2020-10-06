@@ -66,6 +66,7 @@ class Courier(Actor):
         """Immediately after the courier logs on, the log off is scheduled and it starts idling"""
 
         self._log(f'Actor {self.courier_id} logged on')
+
         self._schedule_log_off_event()
         self.process = self.env.process(self._idle_process())
 
@@ -73,6 +74,7 @@ class Courier(Actor):
         """Process that simulates a courier being idle / waiting"""
 
         self.state = 'idle'
+
         self._log(f'Courier {self.courier_id} begins idling')
 
         try:
@@ -89,10 +91,27 @@ class Courier(Actor):
             except Interrupt:
                 break
 
+    def _moving_process(self, destination: Location):
+        """Process detailing how a courier moves to a destination"""
+
+        self.state = 'moving'
+        process_start = sec_to_time(self.env.now)
+        self.dispatcher.courier_moving_event(courier=self)
+        yield self.env.process(
+            self.movement_policy.execute(
+                origin=self.location,
+                destination=destination,
+                env=self.env,
+                courier=self
+            )
+        )
+        self.utilization_time += time_diff(sec_to_time(self.env.now), process_start)
+
     def _picking_up_process(self, orders: Dict[int, Order]):
         """Process that simulates a courier picking up stuff at the pick up location"""
 
         self.state = 'picking_up'
+
         self._log(f'Courier {self.courier_id} begins pick up process')
 
         process_start = sec_to_time(self.env.now)
@@ -113,90 +132,28 @@ class Courier(Actor):
         except Interrupt:
             pass
 
-        self._log(f'Courier {self.courier_id} finishes pick up process')
         self.utilization_time += time_diff(sec_to_time(self.env.now), process_start)
+
+        self._log(f'Courier {self.courier_id} finishes pick up process')
+
+        self.dispatcher.orders_picked_up_event(orders)
 
     def _dropping_off_process(self, orders: Dict[int, Order]):
         """Process that simulates a courier dropping off stuff at the drop off location"""
 
         self.state = 'dropping_off'
+
         self._log(f'Courier {self.courier_id} begins drop off process of orders {list(orders.keys())}')
 
         process_start = sec_to_time(self.env.now)
-
         self.dispatcher.courier_dropping_off_event(courier=self)
-
         service_time = max(order.drop_off_service_time for order in orders.values())
         yield self.env.timeout(delay=service_time)
+        self.utilization_time += time_diff(sec_to_time(self.env.now), process_start)
 
         self._log(f'Courier {self.courier_id} finishes drop off process of orders {list(orders.keys())}')
-        self.utilization_time += time_diff(sec_to_time(self.env.now), process_start)
 
-    def _move_process(self, destination: Location):
-        """Process detailing how a courier moves to a destination"""
-
-        self.state = 'moving'
-
-        process_start = sec_to_time(self.env.now)
-
-        self.dispatcher.courier_moving_event(courier=self)
-
-        yield self.env.process(
-            self.movement_policy.execute(
-                origin=self.location,
-                destination=destination,
-                env=self.env,
-                courier=self
-            )
-        )
-
-        self.utilization_time += time_diff(sec_to_time(self.env.now), process_start)
-
-    def _execute_stop_process(self, stop: Stop):
-        """Process to execute a stop"""
-
-        self.active_stop = stop
-        self._log(
-            f'Courier {self.courier_id} is at stop of type {self.active_stop.type.label} '
-            f'with orders {list(stop.orders.keys())}, on location {stop.location}'
-        )
-
-        service_process = self._picking_up_process if stop.type == StopType.PICK_UP else self._dropping_off_process
-        yield self.env.process(service_process(orders=stop.orders))
-
-        if stop.type == StopType.PICK_UP:
-            self.dispatcher.orders_picked_up_event(orders=stop.orders)
-
-        elif stop.type == StopType.DROP_OFF:
-            self.dispatcher.orders_dropped_off_event(orders=stop.orders, courier=self)
-
-        stop.visited = True
-
-    def _execute_active_route_process(self):
-        """Process to execute the remainder of a route"""
-
-        stops_remaining = [stop for stop in self.active_route.stops if not stop.visited]
-        self._log(f'Courier {self.courier_id} has {len(stops_remaining)} stops remaining')
-
-        for stop in stops_remaining:
-
-            if self.active_stop != stop:
-                self._log(f'Courier {self.courier_id} will move to next stop')
-                yield self.env.process(self._move_process(destination=stop.location))
-
-            if stop.type != StopType.PREPOSITION:
-                yield self.env.process(self._execute_stop_process(stop))
-
-        self.active_route = None
-        self.active_stop = None
-
-        self._log(f'Courier {self.courier_id} finishes route execution')
-
-        if self.log_off_scheduled:
-            self.log_off_event()
-
-        else:
-            self.process = self.env.process(self._idle_process())
+        self.dispatcher.orders_dropped_off_event(orders=orders, courier=self)
 
     def _evaluate_movement_event(self):
         """Event detailing how a courier evaluates to move about the city"""
@@ -204,9 +161,10 @@ class Courier(Actor):
         destination = self.movement_evaluation_policy.execute(current_location=self.location)
 
         if destination is not None:
+
             self._log(f'Courier {self.courier_id} decided to move from {self.location} to {destination}')
 
-            yield self.env.process(self._move_process(destination))
+            yield self.env.process(self._moving_process(destination))
 
             self._log(f'Courier {self.courier_id} finished relocating and is now at {self.location}')
 
@@ -216,7 +174,7 @@ class Courier(Actor):
         else:
             self._log(f'Courier {self.courier_id} decided not to move')
 
-    def notify_event(self, notification: Notification):
+    def notification_event(self, notification: Notification):
         """Event detailing how a courier handles a notification"""
 
         self._log(f'Courier {self.courier_id} received a {notification.type.label} notification')
@@ -239,6 +197,7 @@ class Courier(Actor):
 
         if accepts_notification:
             self._log(f'Courier {self.courier_id} accepted a {notification.type.label} notification. {acceptance_log}')
+
             self.dispatcher.notification_accepted_event(notification=notification, courier=self)
 
             if (
@@ -246,20 +205,21 @@ class Courier(Actor):
                     (isinstance(notification.instruction, Stop) or bool(notification.instruction.stops)) and
                     self.active_route is not None
             ):
-                self.env.process(self._execute_active_route_process())
+                self.env.process(self._execute_active_route())
 
             else:
                 self.process = self.env.process(self._idle_process())
 
         else:
             self._log(f'Courier {self.courier_id} rejected a {notification.type.label} notification. {acceptance_log}')
+
             self.dispatcher.notification_rejected_event(notification=notification, courier=self)
 
             if self.state == 'idle':
                 self.process = self.env.process(self._idle_process())
 
             elif self.state == 'picking_up':
-                self.env.process(self._execute_active_route_process())
+                self.env.process(self._execute_active_route())
 
     def log_off_event(self):
         """Event detailing how a courier logs off of the system, ensuring earnings are calculated"""
@@ -280,13 +240,55 @@ class Courier(Actor):
 
         else:
             self.log_off_scheduled = True
+
             self._log(f'Courier {self.courier_id} is scheduled to log off after completing current instructions')
+
+    def _execute_stop(self, stop: Stop):
+        """Process to execute a stop"""
+
+        self.active_stop = stop
+
+        self._log(
+            f'Courier {self.courier_id} is at stop of type {self.active_stop.type.label} '
+            f'with orders {list(stop.orders.keys())}, on location {stop.location}'
+        )
+
+        service_process = self._picking_up_process if stop.type == StopType.PICK_UP else self._dropping_off_process
+        yield self.env.process(service_process(orders=stop.orders))
+
+        stop.visited = True
+
+    def _execute_active_route(self):
+        """Process to execute the remainder of a route"""
+
+        stops_remaining = [stop for stop in self.active_route.stops if not stop.visited]
+
+        self._log(f'Courier {self.courier_id} has {len(stops_remaining)} stops remaining')
+
+        for stop in stops_remaining:
+            if self.active_stop != stop:
+                self._log(f'Courier {self.courier_id} will move to next stop')
+
+                yield self.env.process(self._moving_process(destination=stop.location))
+
+            if stop.type != StopType.PREPOSITION:
+                yield self.env.process(self._execute_stop(stop))
+
+        self.active_route = None
+        self.active_stop = None
+
+        self._log(f'Courier {self.courier_id} finishes route execution')
+
+        if self.log_off_scheduled:
+            self.log_off_event()
+
+        else:
+            self.process = self.env.process(self._idle_process())
 
     def _log_off_callback(self, event: Event):
         """Callback to activate the log off event"""
 
         self.log_off_event()
-
         event.succeed()
         event.callbacks = []
 

@@ -47,6 +47,8 @@ class TestsDispatcher(unittest.TestCase):
         _dispatcher.assigned_orders[_user.order.order_id] = _user.order
 
     @mock.patch('settings.USER_CANCELLATION_PROBABILITY', 0)
+    @mock.patch('settings.USER_WAIT_TO_CANCEL', min_to_sec(10))
+    @mock.patch('settings.DISPATCHER_WAIT_TO_CANCEL', min_to_sec(15))
     def test_cancel_order_event(self):
         """Test to verify how the dispatcher cancels an order after certain time"""
 
@@ -89,6 +91,8 @@ class TestsDispatcher(unittest.TestCase):
         self.assertEqual(user.state, 'canceled')
 
     @mock.patch('settings.USER_CANCELLATION_PROBABILITY', 0)
+    @mock.patch('settings.USER_WAIT_TO_CANCEL', min_to_sec(44))
+    @mock.patch('settings.DISPATCHER_WAIT_TO_CANCEL', min_to_sec(55))
     def test_order_not_canceled(self):
         """
         Test to verify that the dispatcher doesn't cancel an order if it has a courier assigned.
@@ -393,12 +397,14 @@ class TestsDispatcher(unittest.TestCase):
             on_time=on_time,
             off_time=off_time
         )
-        env.process(courier._move_process(destination=Location(lat=4.689697, lng=-74.055495)))
+        env.process(courier._moving_process(destination=Location(lat=4.689697, lng=-74.055495)))
         env.run(until=initial_time + time_delta)
         self.assertEqual(courier.state, 'moving')
         self.assertEqual(dispatcher.moving_couriers, {courier.courier_id: courier})
         self.assertEqual(dispatcher.idle_couriers, {})
 
+    @mock.patch('settings.DISPATCHER_WAIT_TO_CANCEL', min_to_sec(55))
+    @mock.patch('settings.USER_WAIT_TO_CANCEL', min_to_sec(44))
     def test_buffer_event(self):
         """Test to verify how the mechanics of the dispatcher buffering orders work"""
 

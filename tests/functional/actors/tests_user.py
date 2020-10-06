@@ -31,6 +31,7 @@ class TestsUser(unittest.TestCase):
 
     @patch('settings.USER_WAIT_TO_CANCEL', min_to_sec(5))
     @patch('settings.USER_CANCELLATION_PROBABILITY', 0.99)
+    @patch('settings.DISPATCHER_WAIT_TO_CANCEL', min_to_sec(50))
     def test_submit_cancel_order(self):
         """Test to verify how a user submits and decides to cancel an order"""
 
@@ -65,12 +66,14 @@ class TestsUser(unittest.TestCase):
         self.assertEqual(
             user.order.cancellation_time,
             (
-                    datetime.combine(date.today(), self.preparation_time) +
+                    datetime.combine(date.today(), self.placement_time) +
                     timedelta(seconds=settings.USER_WAIT_TO_CANCEL)
             ).time()
         )
         self.assertEqual(user.state, 'canceled')
 
+    @patch('settings.USER_WAIT_TO_CANCEL', min_to_sec(40))
+    @patch('settings.DISPATCHER_WAIT_TO_CANCEL', min_to_sec(50))
     def test_submit_courier_assigned(self):
         """Test to verify how a user submits and order and doesn't cancel since a courier is assigned"""
 

@@ -12,7 +12,6 @@ from objects.location import Location
 from objects.order import Order
 from policies.user.cancellation.random import RandomCancellationPolicy
 from policies.user.cancellation.user_cancellation_policy import UserCancellationPolicy
-from utils.datetime_utils import sec_to_time, time_diff
 
 USER_CANCELLATION_POLICIES_MAP = {
     'random': RandomCancellationPolicy()
@@ -32,13 +31,15 @@ class User(Actor):
     def __post_init__(self):
         """Immediately after the actor is created, it starts idling"""
 
-        self.process = self.env.process(self._idle_process())
         self._log(f'Actor {self.user_id} logged on')
+
+        self.process = self.env.process(self._idle_process())
 
     def _idle_process(self):
         """Process that simulates a user being idle"""
 
         self.state = 'idle'
+
         self._log(f'New user begins idling')
 
         while True:
@@ -52,6 +53,7 @@ class User(Actor):
         """Process simulating the user is waiting for the order"""
 
         self.state = 'waiting'
+
         self._log(f'User with order {self.order.order_id} begins waiting')
 
         while True:
@@ -88,32 +90,45 @@ class User(Actor):
         self.process.interrupt()
         self.process = self.env.process(self._waiting_process())
         self.dispatcher.order_submitted_event(order, preparation_time, ready_time)
-        self._schedule_cancellation_evaluation_event()
+        self._schedule_evaluate_cancellation_event()
 
-    def _cancellation_evaluation_event(self):
+    def _evaluate_cancellation_event(self):
         """Event detailing how a user decides to cancel an order"""
 
         should_cancel = self.cancellation_policy.execute(courier_id=self.order.courier_id)
 
         if should_cancel:
-            self._log(f'The user decided to cancel the order {self.order.order_id}')
-            self.dispatcher.order_canceled_event(order=self.order)
+            self._cancel_order_event()
 
         else:
             self._log(f'The user decided not to cancel the order {self.order.order_id}')
 
-    def _schedule_cancellation_evaluation_event(self):
+    def _cancel_order_event(self):
+        """Event detailing how the user cancels the order"""
+
+        self._log(f'The user decided to cancel the order {self.order.order_id}')
+
+        self.dispatcher.cancel_order_event(order=self.order)
+        self.process.interrupt()
+
+    def order_dropped_off_event(self, order_id: int):
+        """Event detailing how the user gets the order delivered"""
+
+        self._log(f'The user has the order {order_id} dropped off.')
+
+        self.process.interrupt()
+        self.state = 'dropped_off'
+
+    def _schedule_evaluate_cancellation_event(self):
         """Method that allows the user to schedule the cancellation evaluation event"""
 
         cancellation_event = Event(env=self.env)
-        cancellation_event.callbacks.append(self._cancellation_evaluation_callback)
-        delay = abs(time_diff(self.order.preparation_time, sec_to_time(self.env.now))) + settings.USER_WAIT_TO_CANCEL
-        self.env.schedule(event=cancellation_event, priority=NORMAL, delay=delay)
+        cancellation_event.callbacks.append(self._evaluate_cancellation_callback)
+        self.env.schedule(event=cancellation_event, priority=NORMAL, delay=settings.USER_WAIT_TO_CANCEL)
 
-    def _cancellation_evaluation_callback(self, event: Event):
+    def _evaluate_cancellation_callback(self, event: Event):
         """Callback dto activate de cancellation evaluation eventr"""
 
-        self._cancellation_evaluation_event()
-
+        self._evaluate_cancellation_event()
         event.succeed()
         event.callbacks = []

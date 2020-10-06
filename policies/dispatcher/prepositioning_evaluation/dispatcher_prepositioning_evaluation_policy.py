@@ -1,10 +1,10 @@
 from policies.policy import Policy
 
 
-class DispatcherPrepositioningTimingPolicy(Policy):
+class DispatcherPrepositioningEvaluationPolicy(Policy):
     """Class that establishes when the dispatcher decides to execute prepositioning instructions"""
 
-    def execute(self) -> float:
+    def execute(self, env_time: int) -> bool:
         """Implementation of the policy"""
 
         pass

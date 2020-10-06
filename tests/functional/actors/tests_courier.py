@@ -177,7 +177,7 @@ class TestsCourier(unittest.TestCase):
             courier=courier,
             instruction=instruction
         )
-        env.process(courier.notify_event(notification))
+        env.process(courier.notification_event(notification))
         env.run(until=initial_time + time_delta)
 
         # Asserts that the courier fulfilled the route and is at a different start location
@@ -256,7 +256,7 @@ class TestsCourier(unittest.TestCase):
             courier=courier,
             instruction=instruction
         )
-        env.process(courier.notify_event(notification))
+        env.process(courier.notification_event(notification))
         env.run(until=hour_to_sec(14))
 
         # Asserts that the courier didn't fulfill the route
@@ -360,7 +360,7 @@ class TestsCourier(unittest.TestCase):
         courier.process.interrupt()
         courier.active_stop = courier.active_route.stops[0]
         courier.process = env.process(courier._picking_up_process(orders={active_order.order_id: active_order}))
-        env.process(courier.notify_event(notification))
+        env.process(courier.notification_event(notification))
         env.run(until=hour_to_sec(13) + min_to_sec(12))
 
         # Asserts that the courier fulfilled the active and new order and is at a different start location
@@ -476,7 +476,7 @@ class TestsCourier(unittest.TestCase):
         courier.process.interrupt()
         courier.active_stop = courier.active_route.stops[0]
         courier.process = env.process(courier._picking_up_process(orders={active_order.order_id: active_order}))
-        env.process(courier.notify_event(notification))
+        env.process(courier.notification_event(notification))
         env.run(until=hour_to_sec(14))
 
         # Asserts:
@@ -627,7 +627,7 @@ class TestsCourier(unittest.TestCase):
             ]
         )
         notification = Notification(courier=courier, instruction=instruction, type=NotificationType.PREPOSITIONING)
-        env.process(courier.notify_event(notification))
+        env.process(courier.notification_event(notification))
         env.run(until=initial_time + time_delta)
 
         # Asserts that the courier fulfilled the route and is at a different start location
@@ -679,7 +679,7 @@ class TestsCourier(unittest.TestCase):
             ]
         )
         notification = Notification(courier=courier, instruction=instruction, type=NotificationType.PREPOSITIONING)
-        env.process(courier.notify_event(notification))
+        env.process(courier.notification_event(notification))
         env.run(until=hour_to_sec(7))
 
         # Asserts that the courier didn't fulfill the route
@@ -719,7 +719,7 @@ class TestsCourier(unittest.TestCase):
         )
         order = Order(ready_time=time(6, 15, 0), order_id=23)
         stop = Stop(orders={order.order_id: order}, type=StopType.PICK_UP)
-        env.process(courier._execute_stop_process(stop))
+        env.process(courier._execute_stop(stop))
         dispatcher.process.interrupt()
 
         # Run until there are no more events and assert the courier experienced waiting time.
@@ -744,7 +744,7 @@ class TestsCourier(unittest.TestCase):
         )
         order = Order(ready_time=time(4, 0, 0), order_id=23)
         stop = Stop(orders={order.order_id: order}, type=StopType.PICK_UP)
-        env.process(courier._execute_stop_process(stop))
+        env.process(courier._execute_stop(stop))
         dispatcher.process.interrupt()
         env.run(until=hour_to_sec(7))
         self.assertTrue(

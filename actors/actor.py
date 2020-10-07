@@ -19,8 +19,9 @@ class Actor:
     def __post_init__(self):
         """Immediately after the actor is created, it starts idling"""
 
-        self.process = self.env.process(self._idle_process())
         self._log('Actor logged on')
+
+        self.process = self.env.process(self._idle_process())
 
     def _idle_process(self):
         """Process that simulates the actor being idle and waiting for events"""

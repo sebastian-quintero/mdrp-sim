@@ -1,5 +1,5 @@
 import logging
-from typing import Tuple
+from typing import Tuple, Dict, Any
 
 import requests
 from haversine import haversine
@@ -64,22 +64,67 @@ class OSRMService:
 
         try:
             for ix in range(len(complete_route.stops) - 1):
-                travelling_route = cls.get_route(
+                distance, time = cls.estimate_travelling_properties(
                     origin=complete_route.stops[ix].location,
-                    destination=complete_route.stops[ix + 1].location
+                    destination=complete_route.stops[ix + 1].location,
+                    vehicle=vehicle
                 )
-
-                for travelling_ix in range(len(travelling_route.stops) - 1):
-                    distance = haversine(
-                        point1=travelling_route.stops[travelling_ix].location.coordinates,
-                        point2=travelling_route.stops[travelling_ix + 1].location.coordinates
-                    )
-                    time = int(distance / vehicle.average_velocity)
-
-                    route_distance += distance
-                    route_time += time
+                route_distance += distance
+                route_time += time
 
         except:
             logging.exception('Exception captured in OSRMService.estimate_route_properties. Check Docker.')
 
         return route_distance, route_time
+
+    @classmethod
+    def estimate_travelling_properties(
+            cls,
+            origin: Location,
+            destination: Location,
+            vehicle: Vehicle
+    ) -> Tuple[float, float]:
+        """Method to estimate the distance and time it takes to go from an origin to a destination"""
+
+        route_distance, route_time = 0, 0
+
+        try:
+            travelling_route = cls.get_route(origin=origin, destination=destination)
+
+            for travelling_ix in range(len(travelling_route.stops) - 1):
+                distance = haversine(
+                    point1=travelling_route.stops[travelling_ix].location.coordinates,
+                    point2=travelling_route.stops[travelling_ix + 1].location.coordinates
+                )
+                time = int(distance / vehicle.average_velocity)
+
+                route_distance += distance
+                route_time += time
+
+        except:
+            logging.exception('Exception captured in OSRMService.estimate_travelling_properties. Check Docker.')
+
+        return route_distance, route_time
+
+    @classmethod
+    def update_estimate_time_for_vehicles(
+            cls,
+            origin: Location,
+            destination: Location,
+            time: Dict[Any, float],
+            service_time: float
+    ):
+        """Method to estimate route times for vehicles"""
+
+        for v in time.keys():
+            try:
+                _, time_estimation = cls.estimate_travelling_properties(
+                    origin=origin,
+                    destination=destination,
+                    vehicle=v
+                )
+
+            except:
+                time_estimation = 0
+
+            time[v] += time_estimation + service_time

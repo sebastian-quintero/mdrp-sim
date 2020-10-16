@@ -1,5 +1,5 @@
 import unittest
-from unittest import mock
+from unittest.mock import patch
 
 from objects.location import Location
 from objects.route import Route
@@ -12,7 +12,7 @@ from tests.test_utils import mocked_get_route
 class TestsOSRMService(unittest.TestCase):
     """Tests for the OSRM service class"""
 
-    @mock.patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
+    @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
     def test_get_route(self, osrm):
         """Test to verify the route construction works correctly"""
 
@@ -23,16 +23,16 @@ class TestsOSRMService(unittest.TestCase):
         # Obtains the route and asserts it is equal to the mocked value
         route = OSRMService.get_route(origin, destination)
         self.assertEqual(
-            route,
+            route.stops,
             Route(
                 stops=[
                     Stop(position=0, location=origin),
                     Stop(position=1, location=destination)
                 ]
-            )
+            ).stops
         )
 
-    @mock.patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
+    @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
     def test_estimate_route_properties(self, osrm):
         """Test to verify the route estimation works correctly"""
 

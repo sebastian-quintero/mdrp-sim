@@ -18,6 +18,7 @@ from policies.dispatcher.cancellation.dispatcher_cancellation_policy import Disp
 from policies.dispatcher.cancellation.static import StaticCancellationPolicy
 from policies.dispatcher.matching.dispatcher_matching_policy import DispatcherMatchingPolicy
 from policies.dispatcher.matching.greedy import GreedyMatchingPolicy
+from policies.dispatcher.matching.myopic import MyopicMatchingPolicy
 from policies.dispatcher.prepositioning.dispatcher_prepositioning_policy import DispatcherPrepositioningPolicy
 from policies.dispatcher.prepositioning.naive import NaivePrepositioningPolicy
 from policies.dispatcher.prepositioning_evaluation.dispatcher_prepositioning_evaluation_policy import \
@@ -32,12 +33,13 @@ DISPATCHER_BUFFERING_POLICIES_MAP = {
     'rolling_horizon': RollingBufferingPolicy()
 }
 DISPATCHER_MATCHING_POLICIES_MAP = {
-    'greedy': GreedyMatchingPolicy()
+    'greedy': GreedyMatchingPolicy(),
+    'myopic': MyopicMatchingPolicy()
 }
 DISPATCHER_PREPOSITIONING_POLICIES_MAP = {
     'naive': NaivePrepositioningPolicy()
 }
-DISPATCHER_PREPOSITIONING_TIMING_POLICIES_MAP = {
+DISPATCHER_PREPOSITIONING_EVALUATION_POLICIES_MAP = {
     'fixed': FixedPrepositioningEvaluationPolicy()
 }
 
@@ -172,11 +174,23 @@ class Dispatcher(Actor):
         """Event detailing how the dispatcher executes the dispatch instructions: routing & matching"""
 
         orders = self.unassigned_orders.values()
-        couriers = {**self.idle_couriers, **self.picking_up_couriers}
+        couriers = {
+            courier.courier_id: courier
+            for courier in {**self.idle_couriers, **self.picking_up_couriers}.values()
+            if (
+                len(courier.active_route.orders) < settings.DISPATCHER_PROSPECTS_MAX_ORDERS
+                if courier.active_route is not None
+                else True
+            )
+        }
         self._log(f'Attempting dispatch of {len(orders)} orders and {len(couriers)} couriers.')
 
         if bool(orders) and bool(couriers):
-            notifications = self.matching_policy.execute(orders=list(orders), couriers=list(couriers.values()))
+            notifications = self.matching_policy.execute(
+                orders=list(orders),
+                couriers=list(couriers.values()),
+                env_time=self.env.now
+            )
             notifications_log = [
                 ([order_id for order_id in notification.instruction.orders.keys()], notification.courier.courier_id)
                 for notification in notifications
@@ -188,7 +202,6 @@ class Dispatcher(Actor):
 
             for notification in notifications:
                 if notification.instruction is not None and notification.courier is not None:
-                    notification.type = NotificationType.PICK_UP_DROP_OFF
                     self.notifications.append(notification)
                     self.env.process(couriers[notification.courier.courier_id].notification_event(notification))
 
@@ -232,9 +245,14 @@ class Dispatcher(Actor):
             courier.active_route = notification.instruction
 
         elif notification.type == NotificationType.PICK_UP_DROP_OFF:
+            order_ids = (
+                list(notification.instruction.orders.keys())
+                if isinstance(notification.instruction, Route)
+                else [order_id for stop in notification.instruction for order_id in stop.orders.keys()]
+            )
             processed_order_ids = [
                 order_id
-                for order_id in notification.instruction.orders.keys()
+                for order_id in order_ids
                 if (
                         order_id in self.canceled_orders.keys() or
                         order_id in self.assigned_orders.keys() or
@@ -250,17 +268,37 @@ class Dispatcher(Actor):
                 notification.update(processed_order_ids)
 
             if (
-                    bool(notification.instruction.orders) and
-                    (isinstance(notification.instruction, Stop) or bool(notification.instruction.stops))
+                    (
+                            isinstance(notification.instruction, Route) and
+                            bool(notification.instruction.orders) and
+                            bool(notification.instruction.stops)
+                    ) or
+                    (
+                            isinstance(notification.instruction, list) and
+                            bool(notification.instruction) and
+                            bool(notification.instruction[0].orders)
+                    )
             ):
-
+                order_ids = (
+                    list(notification.instruction.orders.keys())
+                    if isinstance(notification.instruction, Route)
+                    else [order_id for stop in notification.instruction for order_id in stop.orders.keys()]
+                )
                 self._log(
-                    f'Dispatcher will handle acceptance of orders {list(notification.instruction.orders.keys())} '
+                    f'Dispatcher will handle acceptance of orders {order_ids} '
                     f'from courier {courier.courier_id} (state = {courier.state}). '
-                    f'Instruction is a {"Route" if isinstance(notification.instruction, Route) else "Stop"}'
+                    f'Instruction is a {"Route" if isinstance(notification.instruction, Route) else "List[Stop]"}'
                 )
 
-                for order_id, order in notification.instruction.orders.items():
+                instruction_orders = (
+                    notification.instruction.orders.items()
+                    if isinstance(notification.instruction, Route)
+                    else [
+                        (order_id, order)
+                        for stop in notification.instruction for order_id, order in stop.orders.items()
+                    ]
+                )
+                for order_id, order in instruction_orders:
                     del self.unassigned_orders[order_id]
                     order.acceptance_time = sec_to_time(self.env.now)
                     order.state = 'in_progress'
@@ -270,20 +308,20 @@ class Dispatcher(Actor):
                 if courier.state == 'idle' and isinstance(notification.instruction, Route):
                     courier.active_route = notification.instruction
 
-                elif courier.state == 'picking_up' and isinstance(notification.instruction, Stop):
+                elif courier.state == 'picking_up' and isinstance(notification.instruction, list):
+                    for stop in notification.instruction:
+                        for order_id, order in stop.orders.items():
+                            courier.active_route.orders[order_id] = order
+                            courier.active_stop.orders[order_id] = order
 
-                    for order_id, order in notification.instruction.orders.items():
-                        courier.active_route.orders[order_id] = order
-                        courier.active_stop.orders[order_id] = order
-
-                    courier.active_route.stops.append(
-                        Stop(
-                            location=notification.instruction.location,
-                            position=len(courier.active_route.stops),
-                            orders=notification.instruction.orders,
-                            type=notification.instruction.type
+                        courier.active_route.stops.append(
+                            Stop(
+                                location=stop.location,
+                                position=len(courier.active_route.stops),
+                                orders=stop.orders,
+                                type=stop.type
+                            )
                         )
-                    )
 
                 courier.accepted_notifications.append(notification)
 

@@ -16,7 +16,7 @@ from services.osrm_service import OSRMService
 class GreedyMatchingPolicy(DispatcherMatchingPolicy):
     """Class containing the policy for the dispatcher to execute a greedy matching"""
 
-    def execute(self, orders: List[Order], couriers: List[Courier]) -> List[Notification]:
+    def execute(self, orders: List[Order], couriers: List[Courier], env_time: int) -> List[Notification]:
         """Implementation of the policy"""
 
         idle_couriers = [courier for courier in couriers if courier.state == 'idle' and courier.active_route is None]
@@ -75,11 +75,7 @@ class GreedyMatchingPolicy(DispatcherMatchingPolicy):
         for order_ix, order in enumerate(orders):
             for courier_ix, courier in enumerate(couriers):
                 distance_to_pick_up = haversine(courier.location.coordinates, order.pick_up_at.coordinates)
-                courier_orders = len(courier.active_route.orders) if courier.active_route is not None else 0
-                if (
-                        distance_to_pick_up <= settings.DISPATCHER_PROSPECTS_MAX_DISTANCE and
-                        courier_orders + 1 <= settings.DISPATCHER_PROSPECTS_MAX_ORDERS
-                ):
+                if distance_to_pick_up <= settings.DISPATCHER_PROSPECTS_MAX_DISTANCE:
                     prospects.append((order_ix, courier_ix))
 
         return np.array(prospects)

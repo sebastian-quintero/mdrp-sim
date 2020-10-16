@@ -189,29 +189,23 @@ class Courier(Actor):
         accepts_notification = yield self.env.process(
             self.acceptance_policy.execute(self.acceptance_rate, self.env)
         )
-        acceptance_log = (
-            f'The instruction has {len(notification.instruction.orders)} orders'
-            if notification.type == NotificationType.PICK_UP_DROP_OFF
-            else ''
-        )
 
         if accepts_notification:
-            self._log(f'Courier {self.courier_id} accepted a {notification.type.label} notification. {acceptance_log}')
+            self._log(f'Courier {self.courier_id} accepted a {notification.type.label} notification.')
 
             self.dispatcher.notification_accepted_event(notification=notification, courier=self)
 
             if (
-                    (bool(notification.instruction.orders) or notification.type == NotificationType.PREPOSITIONING) and
-                    (isinstance(notification.instruction, Stop) or bool(notification.instruction.stops)) and
+                    (isinstance(notification.instruction, list) or bool(notification.instruction.orders)) and
                     self.active_route is not None
-            ):
+            ) or notification.type == NotificationType.PREPOSITIONING:
                 self.env.process(self._execute_active_route())
 
             else:
                 self.process = self.env.process(self._idle_process())
 
         else:
-            self._log(f'Courier {self.courier_id} rejected a {notification.type.label} notification. {acceptance_log}')
+            self._log(f'Courier {self.courier_id} rejected a {notification.type.label} notification.')
 
             self.dispatcher.notification_rejected_event(notification=notification, courier=self)
 

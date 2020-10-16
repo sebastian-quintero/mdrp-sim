@@ -1,6 +1,6 @@
 import unittest
 from datetime import time
-from unittest import mock
+from unittest.mock import patch
 
 import numpy as np
 from haversine import haversine
@@ -14,10 +14,10 @@ from policies.dispatcher.matching.greedy import GreedyMatchingPolicy
 from tests.test_utils import mocked_get_route
 
 
-class TestsCourier(unittest.TestCase):
+class TestsGreedyMatchingPolicy(unittest.TestCase):
     """Tests for the greedy matching policy class"""
 
-    @mock.patch('settings.DISPATCHER_PROSPECTS_MAX_DISTANCE', 8)
+    @patch('settings.DISPATCHER_PROSPECTS_MAX_DISTANCE', 5)
     def test_get_prospects(self):
         """Test to verify how prospects are obtained"""
 
@@ -37,7 +37,7 @@ class TestsCourier(unittest.TestCase):
         # Case 2: verify an order is not prospect to a courier
         order = Order(pick_up_at=Location(4.678622, -74.055694), drop_off_at=Location(4.690207, -74.044235))
         courier = Courier(
-            location=Location(4.709022, -74.035102),
+            location=Location(4.8090, -74.9351),
             on_time=on_time,
             off_time=off_time,
             active_route=Route(
@@ -55,8 +55,8 @@ class TestsCourier(unittest.TestCase):
             order_id=1
         )
         order_2 = Order(
-            pick_up_at=Location(4.678622, -74.055694),
-            drop_off_at=Location(4.690207, -74.044235),
+            pick_up_at=Location(1.178, -72.25),
+            drop_off_at=Location(1.690207, -75.044235),
             order_id=2
         )
         courier_1 = Courier(location=Location(4.709022, -74.035102), on_time=on_time, off_time=off_time, courier_id=1)
@@ -64,16 +64,12 @@ class TestsCourier(unittest.TestCase):
             location=Location(4.709022, -74.035102),
             on_time=on_time,
             off_time=off_time,
-            active_route=Route(
-                stops=[],
-                orders={2: Order(), 3: Order(), 4: Order()}
-            ),
             courier_id=2
         )
         prospects = policy._get_prospects(orders=[order_1, order_2], couriers=[courier_1, courier_2])
-        self.assertEqual(prospects.tolist(), [[0, 0], [1, 0]])
+        self.assertEqual(len(prospects), 2)
 
-    @mock.patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
+    @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
     def test_get_estimations(self, osrm):
         """Test to verify that estimations are correctly calculated"""
 
@@ -115,8 +111,8 @@ class TestsCourier(unittest.TestCase):
             )
         )
 
-    @mock.patch('settings.DISPATCHER_PROSPECTS_MAX_DISTANCE', 8)
-    @mock.patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
+    @patch('settings.DISPATCHER_PROSPECTS_MAX_DISTANCE', 8)
+    @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
     def test_execute(self, osrm):
         """Test the full functionality of the greedy matching policy"""
 
@@ -144,7 +140,7 @@ class TestsCourier(unittest.TestCase):
             vehicle=Vehicle.CAR,
             state='idle'
         )
-        notifications = policy.execute(orders=[order], couriers=[courier_1, courier_2])
+        notifications = policy.execute(orders=[order], couriers=[courier_1, courier_2], env_time=3)
         self.assertEqual(len(notifications), 1)
         self.assertEqual(notifications[0].courier, courier_2)
         self.assertIn(order, notifications[0].instruction.orders.values())
@@ -179,7 +175,7 @@ class TestsCourier(unittest.TestCase):
             state='idle',
             courier_id=2
         )
-        notifications = policy.execute(orders=[order_1, order_2], couriers=[courier_1, courier_2])
+        notifications = policy.execute(orders=[order_1, order_2], couriers=[courier_1, courier_2], env_time=4)
         self.assertEqual(len(notifications), 2)
         self.assertEqual(notifications[0].courier, courier_1)
         self.assertIn(order_1, notifications[0].instruction.orders.values())
@@ -205,7 +201,7 @@ class TestsCourier(unittest.TestCase):
             state='idle',
             courier_id=1
         )
-        notifications = policy.execute(orders=[order_1, order_2], couriers=[courier])
+        notifications = policy.execute(orders=[order_1, order_2], couriers=[courier], env_time=5)
         self.assertEqual(len(notifications), 1)
         self.assertEqual(notifications[0].courier, courier)
         self.assertIn(order_1, notifications[0].instruction.orders.values())

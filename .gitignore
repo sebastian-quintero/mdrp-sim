@@ -134,3 +134,6 @@ rappi/
 # Pycharm
 .idea/
 
+# VSCode
+.vscode/
+

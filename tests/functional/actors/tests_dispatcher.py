@@ -1,7 +1,7 @@
 import random
 import unittest
 from datetime import time, timedelta, datetime, date
-from unittest import mock
+from unittest.mock import patch
 
 from simpy import Environment
 
@@ -46,9 +46,9 @@ class TestsDispatcher(unittest.TestCase):
         del _dispatcher.unassigned_orders[_user.order.order_id]
         _dispatcher.assigned_orders[_user.order.order_id] = _user.order
 
-    @mock.patch('settings.USER_CANCELLATION_PROBABILITY', 0)
-    @mock.patch('settings.USER_WAIT_TO_CANCEL', min_to_sec(10))
-    @mock.patch('settings.DISPATCHER_WAIT_TO_CANCEL', min_to_sec(15))
+    @patch('settings.USER_CANCELLATION_PROBABILITY', 0)
+    @patch('settings.USER_WAIT_TO_CANCEL', min_to_sec(10))
+    @patch('settings.DISPATCHER_WAIT_TO_CANCEL', min_to_sec(15))
     def test_cancel_order_event(self):
         """Test to verify how the dispatcher cancels an order after certain time"""
 
@@ -90,9 +90,9 @@ class TestsDispatcher(unittest.TestCase):
         )
         self.assertEqual(user.state, 'canceled')
 
-    @mock.patch('settings.USER_CANCELLATION_PROBABILITY', 0)
-    @mock.patch('settings.USER_WAIT_TO_CANCEL', min_to_sec(44))
-    @mock.patch('settings.DISPATCHER_WAIT_TO_CANCEL', min_to_sec(55))
+    @patch('settings.USER_CANCELLATION_PROBABILITY', 0)
+    @patch('settings.USER_WAIT_TO_CANCEL', min_to_sec(44))
+    @patch('settings.DISPATCHER_WAIT_TO_CANCEL', min_to_sec(55))
     def test_order_not_canceled(self):
         """
         Test to verify that the dispatcher doesn't cancel an order if it has a courier assigned.
@@ -174,7 +174,7 @@ class TestsDispatcher(unittest.TestCase):
         self.assertEqual(order.state, 'picked_up')
         self.assertEqual(order.pick_up_time, sec_to_time(initial_time))
 
-    @mock.patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
     def test_orders_dropped_off_event(self):
         """Test to verify the mechanics of orders being dropped off"""
 
@@ -241,7 +241,7 @@ class TestsDispatcher(unittest.TestCase):
         self.assertEqual(courier.active_route, instruction)
         self.assertEqual(dispatcher.unassigned_orders, {})
 
-    @mock.patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
     def test_notification_rejected_event(self):
         """Test to verify the mechanics of a notification being rejected by a courier"""
 
@@ -281,7 +281,7 @@ class TestsDispatcher(unittest.TestCase):
         self.assertIn(courier.courier_id, order.rejected_by)
         self.assertIn(order.order_id, courier.rejected_orders)
 
-    @mock.patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
     def test_courier_idle_event(self, *args):
         """Test to verifiy the mechanics of how a courier is set to idle by the dispatcher"""
 
@@ -357,7 +357,7 @@ class TestsDispatcher(unittest.TestCase):
         self.assertIn(courier.courier_id, dispatcher.picking_up_couriers.keys())
         self.assertEqual(dispatcher.idle_couriers, {})
 
-    @mock.patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
+    @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
     def test_courier_busy_event(self, *args):
         """Test to verify the mechanics of how the dispatcher sets a courier to busy"""
 
@@ -403,8 +403,8 @@ class TestsDispatcher(unittest.TestCase):
         self.assertEqual(dispatcher.moving_couriers, {courier.courier_id: courier})
         self.assertEqual(dispatcher.idle_couriers, {})
 
-    @mock.patch('settings.DISPATCHER_WAIT_TO_CANCEL', min_to_sec(55))
-    @mock.patch('settings.USER_WAIT_TO_CANCEL', min_to_sec(44))
+    @patch('settings.DISPATCHER_WAIT_TO_CANCEL', min_to_sec(55))
+    @patch('settings.USER_WAIT_TO_CANCEL', min_to_sec(44))
     def test_buffer_event(self):
         """Test to verify how the mechanics of the dispatcher buffering orders work"""
 
@@ -449,7 +449,7 @@ class TestsDispatcher(unittest.TestCase):
         env.run(until=initial_time + time_delta)
         self.assertEqual(len(dispatcher.unassigned_orders), 3)
 
-    @mock.patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
     def test_courier_log_off(self):
         """Test to verify how the dispatcher handles a courier logging off"""
 
@@ -551,7 +551,7 @@ class TestsDispatcher(unittest.TestCase):
         self.assertIsNotNone(courier.active_route)
         self.assertEqual(courier.active_route, instruction)
 
-    @mock.patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
     def test_prepositioning_notification_rejected_event(self):
         """Test to verify the mechanics of a prepositioning notification being rejected by a courier"""
 

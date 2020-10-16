@@ -30,6 +30,7 @@ def upgrade():
         sa.Column('median', sa.Float(), nullable=True),
         sa.Column('ninetieth_percentile', sa.Float(), nullable=True),
         sa.Column('maximum', sa.Float(), nullable=True),
+        sa.Column('settings', sa.JSON(), nullable=True),
     )
     op.create_index('ix_metrics_created_at', 'metrics', ['created_at'], unique=False)
     op.create_index('ix_metrics_instance_id', 'metrics', ['instance_id'], unique=False)

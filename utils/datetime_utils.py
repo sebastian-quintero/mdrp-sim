@@ -67,3 +67,9 @@ def time_add(time_to_add: time, seconds: float) -> time:
     """Adds the desired seconds to the time provided"""
 
     return (datetime.combine(date.today(), time_to_add) + timedelta(seconds=seconds)).time()
+
+
+def time_to_str(time_to_convert: time) -> str:
+    """Converts a time object to str"""
+
+    return time_to_convert.strftime('%H:%M:%S')

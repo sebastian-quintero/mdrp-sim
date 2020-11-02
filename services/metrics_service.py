@@ -3,7 +3,7 @@ from typing import Dict, List, Union
 
 import numpy as np
 import pandas as pd
-from sqlalchemy import create_engine, DateTime, Integer, String, Float
+from sqlalchemy import create_engine, DateTime, Integer, String, Float, JSON
 
 import settings
 from actors.dispatcher import Dispatcher
@@ -11,7 +11,7 @@ from ddbb.config import get_db_url
 from objects.metric import Metric
 from objects.notification import NotificationType
 from objects.route import Route
-from utils.datetime_utils import time_diff, sec_to_hour
+from utils.datetime_utils import time_diff, sec_to_hour, time_to_str
 
 
 class MetricsService:
@@ -80,10 +80,26 @@ class MetricsService:
     def _save_metrics(self, metrics: List[Metric]):
         """Method for saving the metrics to de DDBB"""
 
+        settings_dict = {
+            'DISPATCHER_CANCELLATION_POLICY': settings.DISPATCHER_CANCELLATION_POLICY,
+            'DISPATCHER_BUFFERING_POLICY': settings.DISPATCHER_BUFFERING_POLICY,
+            'DISPATCHER_MATCHING_POLICY': settings.DISPATCHER_MATCHING_POLICY,
+            'DISPATCHER_PREPOSITIONING_POLICY': settings.DISPATCHER_PREPOSITIONING_POLICY,
+            'DISPATCHER_PREPOSITIONING_TIMING_POLICY': settings.DISPATCHER_PREPOSITIONING_EVALUATION_POLICY,
+            'COURIER_ACCEPTANCE_POLICY': settings.COURIER_ACCEPTANCE_POLICY,
+            'COURIER_MOVEMENT_EVALUATION_POLICY': settings.COURIER_MOVEMENT_EVALUATION_POLICY,
+            'COURIER_MOVEMENT_POLICY': settings.COURIER_MOVEMENT_POLICY,
+            'USER_CANCELLATION_POLICY': settings.USER_CANCELLATION_POLICY,
+            'SIMULATE_FROM': time_to_str(settings.SIMULATE_FROM),
+            'SIMULATE_UNTIL': time_to_str(settings.SIMULATE_UNTIL),
+            'CREATE_USERS_UNTIL': time_to_str(settings.CREATE_USERS_UNTIL),
+            'CREATE_COURIERS_UNTIL': time_to_str(settings.CREATE_COURIERS_UNTIL),
+            'WARM_UP_TIME': settings.WARM_UP_TIME
+        }
         metrics_dict = [
             {
                 **metric.to_dict(),
-                **{'instance_id': settings.INSTANCE}
+                **{'instance_id': settings.INSTANCE, 'settings': settings_dict}
             }
             for metric in metrics
         ]
@@ -104,7 +120,8 @@ class MetricsService:
                 'tenth_percentile': Float,
                 'median': Float,
                 'ninetieth_percentile': Float,
-                'maximum': Float
+                'maximum': Float,
+                'settings': JSON
             }
         )
 

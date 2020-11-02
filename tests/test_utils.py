@@ -12,7 +12,7 @@ from policies.dispatcher.matching.dispatcher_matching_policy import DispatcherMa
 class DummyMatchingPolicy(DispatcherMatchingPolicy):
     """Class to produce dummy notifications for testing purposes"""
 
-    def execute(self, orders: Iterable[Order], couriers: Iterable[Courier]) -> List[Notification]:
+    def execute(self, orders: Iterable[Order], couriers: Iterable[Courier], env_time: int) -> List[Notification]:
         """Implementation of the dummy policy"""
 
         return []

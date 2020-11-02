@@ -1,4 +1,3 @@
-import copy
 import logging
 from dataclasses import dataclass, field
 from datetime import time
@@ -14,14 +13,14 @@ from actors.courier import Courier, COURIER_ACCEPTANCE_POLICIES_MAP, COURIER_MOV
     COURIER_MOVEMENT_POLICIES_MAP
 from actors.dispatcher import Dispatcher, DISPATCHER_CANCELLATION_POLICIES_MAP, DISPATCHER_BUFFERING_POLICIES_MAP, \
     DISPATCHER_MATCHING_POLICIES_MAP, DISPATCHER_PREPOSITIONING_POLICIES_MAP, \
-    DISPATCHER_PREPOSITIONING_TIMING_POLICIES_MAP
+    DISPATCHER_PREPOSITIONING_EVALUATION_POLICIES_MAP
 from actors.user import User, USER_CANCELLATION_POLICIES_MAP
 from ddbb.config import get_db_url
 from ddbb.queries.couriers_instance_data_query import couriers_query
 from ddbb.queries.orders_instance_data_query import orders_query
 from objects.location import Location
 from objects.vehicle import Vehicle
-from utils.datetime_utils import sec_to_time, time_to_query_format
+from utils.datetime_utils import sec_to_time, time_to_query_format, time_add
 from utils.logging_utils import world_log
 
 
@@ -51,8 +50,8 @@ class World:
             buffering_policy=DISPATCHER_BUFFERING_POLICIES_MAP[settings.DISPATCHER_BUFFERING_POLICY],
             matching_policy=DISPATCHER_MATCHING_POLICIES_MAP[settings.DISPATCHER_MATCHING_POLICY],
             prepositioning_policy=DISPATCHER_PREPOSITIONING_POLICIES_MAP[settings.DISPATCHER_PREPOSITIONING_POLICY],
-            prepositioning_timing_policy=DISPATCHER_PREPOSITIONING_TIMING_POLICIES_MAP[
-                settings.DISPATCHER_PREPOSITIONING_TIMING_POLICY
+            prepositioning_evaluation_policy=DISPATCHER_PREPOSITIONING_EVALUATION_POLICIES_MAP[
+                settings.DISPATCHER_PREPOSITIONING_EVALUATION_POLICY
             ]
         )
         self.process = self.env.process(self._simulate())
@@ -159,19 +158,22 @@ class World:
             self.couriers.append(courier)
 
     def post_process(self):
-        """Method for post processing actions after the simulation has ended"""
+        """Post process what happened in the World before calculating metrics"""
 
-        logging.info(
-            f'Instance {settings.INSTANCE} | Simulation finished at sim time = {sec_to_time(self.env.now)} '
-            f'{world_log(self.dispatcher)}'
-        )
+        logging.info(f'Instance {settings.INSTANCE} | Simulation finished at sim time = {sec_to_time(self.env.now)}.')
 
-        idle_couriers = copy.deepcopy(self.dispatcher.idle_couriers.values())
-
-        for courier in idle_couriers:
+        for courier_id, courier in self.dispatcher.idle_couriers.copy().items():
             courier.off_time = sec_to_time(self.env.now)
             courier.log_off_event()
 
-        logging.info(
-            f'Instance {settings.INSTANCE} | Post processing finished {world_log(self.dispatcher)}'
-        )
+        warm_up_time_start = time_add(settings.SIMULATE_FROM, settings.WARM_UP_TIME)
+
+        for order_id, order in self.dispatcher.canceled_orders.copy().items():
+            if order.cancellation_time < warm_up_time_start:
+                del self.dispatcher.canceled_orders[order_id]
+
+        for order_id, order in self.dispatcher.fulfilled_orders.copy().items():
+            if order.drop_off_time < warm_up_time_start:
+                del self.dispatcher.fulfilled_orders[order_id]
+
+        logging.info(f'Instance {settings.INSTANCE} | Post processed the simulation.')

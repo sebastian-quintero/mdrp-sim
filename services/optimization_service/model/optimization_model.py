@@ -3,7 +3,6 @@ from typing import List
 
 import numpy as np
 from pulp import LpMinimize, LpMaximize, LpProblem, LpConstraint, LpVariable, value, LpStatus, PULP_CBC_CMD
-import pulp
 
 SOLUTION_VALUE = 0.99
 

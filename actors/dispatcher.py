@@ -34,7 +34,30 @@ DISPATCHER_BUFFERING_POLICIES_MAP = {
 }
 DISPATCHER_MATCHING_POLICIES_MAP = {
     'greedy': GreedyMatchingPolicy(),
-    'myopic': MyopicMatchingPolicy()
+    'mdrp': MyopicMatchingPolicy(
+        assignment_updates=False,
+        prospects=False,
+        notification_filtering=True,
+        mip_matcher=True
+    ),
+    'mdrp_graph': MyopicMatchingPolicy(
+        assignment_updates=False,
+        prospects=False,
+        notification_filtering=True,
+        mip_matcher=False
+    ),
+    'mdrp_graph_prospects': MyopicMatchingPolicy(
+        assignment_updates=False,
+        prospects=True,
+        notification_filtering=True,
+        mip_matcher=False
+    ),
+    'modified_mdrp': MyopicMatchingPolicy(
+        assignment_updates=True,
+        prospects=True,
+        notification_filtering=True,
+        mip_matcher=False
+    ),
 }
 DISPATCHER_PREPOSITIONING_POLICIES_MAP = {
     'naive': NaivePrepositioningPolicy()

@@ -25,9 +25,9 @@ WARM_UP_TIME: float = hour_to_sec(1) + min_to_sec(30)  # Warm up time [sec] to a
 #   Dispatcher
 DISPATCHER_CANCELLATION_POLICY: str = 'static'  # Policy for canceling orders. Options: ['static']
 DISPATCHER_BUFFERING_POLICY: str = 'rolling_horizon'  # Policy for buffering orders: Options: ['rolling_horizon']
-DISPATCHER_MATCHING_POLICY: str = 'myopic'  # Policy for matching orders and couriers. Options: ['greedy', 'myopic']
-DISPATCHER_PREPOSITIONING_POLICY: str = 'naive'  # Policy for prepositioning couriers. Options: ['naive']
 DISPATCHER_PREPOSITIONING_EVALUATION_POLICY: str = 'fixed'  # Policy for the prepositioning timing. Options: ['fixed']
+DISPATCHER_PREPOSITIONING_POLICY: str = 'naive'  # Policy for prepositioning couriers. Options: ['naive']
+DISPATCHER_MATCHING_POLICY: str = 'mdrp'  # Policy for matching orders and couriers. Options: ['greedy', 'mdrp', 'mdrp_graph', 'mdrp_graph_prospects', 'modified_mdrp']
 #   Courier
 COURIER_ACCEPTANCE_POLICY: str = 'uniform'  # Policy for accepting a notification. Options: ['uniform', 'absolute']
 COURIER_MOVEMENT_EVALUATION_POLICY: str = 'neighbors'  # Policy to determine if the courier wants to relocate. Options: ['neighbors', 'still']

@@ -1,4 +1,5 @@
 import random
+from os import system
 
 from simpy import Environment
 
@@ -21,3 +22,8 @@ if __name__ == '__main__':
 
     metrics_service = MetricsService()
     metrics_service.calculate_and_save_metrics(world.dispatcher)
+
+    system(
+        f'say The simulation process for instance {settings.INSTANCE}, '
+        f'matching policy {settings.DISPATCHER_MATCHING_POLICY} has finished.'
+    )

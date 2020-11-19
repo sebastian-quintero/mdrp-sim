@@ -1,5 +1,4 @@
 import random
-from os import system
 
 from simpy import Environment
 
@@ -13,17 +12,14 @@ if __name__ == '__main__':
     """Main method for running the mdrp-sim"""
 
     configure_logs()
-    random.seed(settings.SEED)
 
-    env = Environment(initial_time=time_to_sec(settings.SIMULATE_FROM))
-    world = World(env=env)
-    env.run(until=time_to_sec(settings.SIMULATE_UNTIL))
-    world.post_process()
+    for instance in settings.INSTANCES:
+        random.seed(settings.SEED)
 
-    metrics_service = MetricsService()
-    metrics_service.calculate_and_save_metrics(world.dispatcher)
+        env = Environment(initial_time=time_to_sec(settings.SIMULATE_FROM))
+        world = World(env=env, instance=instance)
+        env.run(until=time_to_sec(settings.SIMULATE_UNTIL))
+        world.post_process()
 
-    system(
-        f'say The simulation process for instance {settings.INSTANCE}, '
-        f'matching policy {settings.DISPATCHER_MATCHING_POLICY} has finished.'
-    )
+        metrics_service = MetricsService(instance=instance)
+        metrics_service.calculate_and_save_metrics(world.dispatcher)

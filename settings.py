@@ -1,10 +1,10 @@
 from datetime import time
-from typing import Union, Optional
+from typing import Union, Optional, List
 
 from utils.datetime_utils import min_to_sec, hour_to_sec
 
 # Project
-INSTANCE: int = 3  # Desired instance to be simulated
+INSTANCES: List[int] = [3, 4]  # Desired instances to be simulated
 VERBOSE_LOGS: bool = False  # Enable / Disable specific (verbose) actor and policy logs
 SEED: Optional[Union[float, int]] = 8795  # [Optional] Seed for running the simulation. Can be None.
 

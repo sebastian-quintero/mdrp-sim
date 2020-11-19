@@ -17,19 +17,21 @@ from utils.datetime_utils import time_diff, sec_to_hour, time_to_str
 class MetricsService:
     """Class that contains the Metrics Service to calculate the output of a simulation"""
 
-    def __init__(self):
+    def __init__(self, instance: int):
         """Instantiates the class by creating the DDBB connection"""
+
+        self._instance = instance
         self._connection = create_engine(get_db_url(), pool_size=20, max_overflow=0, pool_pre_ping=True)
 
     def calculate_and_save_metrics(self, dispatcher: Dispatcher):
         """Method for calculating and saving the simulation metrics"""
 
         metrics = self._calculate_metrics(dispatcher)
-        logging.info(f'Instance {settings.INSTANCE} | Successful metrics calculation.')
+        logging.info(f'Instance {self._instance} | Successful metrics calculation.')
 
         self._save_metrics(metrics)
         self._connection.dispose()
-        logging.info(f'Instance {settings.INSTANCE} | Successfully saved metrics to DDBB.')
+        logging.info(f'Instance {self._instance} | Successfully saved metrics to DDBB.')
 
     def _calculate_metrics(self, dispatcher: Dispatcher) -> List[Metric]:
         """Method for calculating metrics based on the Dispatcher, after the simulation is finished"""
@@ -99,7 +101,7 @@ class MetricsService:
         metrics_dict = [
             {
                 **metric.to_dict(),
-                **{'instance_id': settings.INSTANCE, 'settings': settings_dict}
+                **{'instance_id': self._instance, 'settings': settings_dict}
             }
             for metric in metrics
         ]

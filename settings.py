@@ -5,7 +5,7 @@ from utils.datetime_utils import min_to_sec, hour_to_sec
 
 # Project
 INSTANCES: List[int] = [
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23
+    3, 4, 5, 9, 10, 11, 15, 16, 17, 21, 22, 23
 ]  # Desired instances to be simulated
 VERBOSE_LOGS: bool = False  # Enable / Disable specific (verbose) actor and policy logs
 SEED: Optional[Union[float, int]] = 8795  # [Optional] Seed for running the simulation. Can be None.
@@ -18,7 +18,7 @@ DB_DATABASE: str = 'mdrp_sim'  # DDBB Name
 
 # Simulation Constants
 SIMULATE_FROM: time = time(0, 0, 0)  # Simulate from this time on
-SIMULATE_UNTIL: time = time(11, 59, 59)  # Simulate until this time
+SIMULATE_UNTIL: time = time(23, 59, 59)  # Simulate until this time
 CREATE_USERS_UNTIL: time = time(22, 30, 0)  # Create new users to submit orders until this time
 CREATE_COURIERS_UNTIL: time = time(22, 0, 0)  # Create new couriers to log on until this time
 WARM_UP_TIME: float = hour_to_sec(4) + min_to_sec(30)  # Warm up time [sec] to achieve steady state simulation

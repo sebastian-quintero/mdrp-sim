@@ -1,6 +1,7 @@
 import logging
 from dataclasses import dataclass, field
 from datetime import time
+from os import system
 from typing import List, Dict, Any, Optional, Tuple
 
 import pandas as pd
@@ -29,6 +30,7 @@ class World:
     """A class to handle the simulated world"""
 
     env: Environment
+    instance: int
     connection: Optional[Engine] = None
     couriers: List[Courier] = field(default_factory=lambda: list())
     dispatcher: Optional[Dispatcher] = None
@@ -41,7 +43,7 @@ class World:
         The World begins simulating immediately after it is created.
         """
 
-        logging.info(f'Instance {settings.INSTANCE} | Simulation started at sim time = {sec_to_time(self.env.now)}.')
+        logging.info(f'Instance {self.instance} | Simulation started at sim time = {sec_to_time(self.env.now)}.')
 
         self.connection = create_engine(get_db_url(), pool_size=20, max_overflow=0, pool_pre_ping=True)
         self.dispatcher = Dispatcher(
@@ -74,7 +76,7 @@ class World:
 
             if orders_info is not None or couriers_info is not None or should_log_orders or should_log_couriers:
                 logging.info(
-                    f'Instance {settings.INSTANCE} | sim time = {sec_to_time(self.env.now)} '
+                    f'Instance {self.instance} | sim time = {sec_to_time(self.env.now)} '
                     f'{world_log(self.dispatcher)}'
                 )
 
@@ -85,7 +87,7 @@ class World:
 
         query = orders_query.format(
             placement_time=time_to_query_format(current_time),
-            instance_id=settings.INSTANCE
+            instance_id=self.instance
         )
         orders_df = pd.read_sql(sql=query, con=self.connection)
 
@@ -103,7 +105,7 @@ class World:
 
         query = couriers_query.format(
             on_time=time_to_query_format(current_time),
-            instance_id=settings.INSTANCE
+            instance_id=self.instance
         )
         couriers_df = pd.read_sql(sql=query, con=self.connection)
 
@@ -160,7 +162,7 @@ class World:
     def post_process(self):
         """Post process what happened in the World before calculating metrics"""
 
-        logging.info(f'Instance {settings.INSTANCE} | Simulation finished at sim time = {sec_to_time(self.env.now)}.')
+        logging.info(f'Instance {self.instance} | Simulation finished at sim time = {sec_to_time(self.env.now)}.')
 
         for courier_id, courier in self.dispatcher.idle_couriers.copy().items():
             courier.off_time = sec_to_time(self.env.now)
@@ -176,4 +178,8 @@ class World:
             if order.drop_off_time < warm_up_time_start:
                 del self.dispatcher.fulfilled_orders[order_id]
 
-        logging.info(f'Instance {settings.INSTANCE} | Post processed the simulation.')
+        logging.info(f'Instance {self.instance} | Post processed the simulation.')
+        system(
+            f'say The simulation process for instance {self.instance}, '
+            f'matching policy {settings.DISPATCHER_MATCHING_POLICY} has finished.'
+        )

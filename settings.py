@@ -5,7 +5,7 @@ from utils.datetime_utils import min_to_sec, hour_to_sec
 
 # Project
 INSTANCES: List[int] = [
-    3, 4, 5, 9, 10, 11, 15, 16, 17, 21, 22, 23
+    3, 4, 9, 10, 15, 16, 21, 23
 ]  # Desired instances to be simulated
 VERBOSE_LOGS: bool = False  # Enable / Disable specific (verbose) actor and policy logs
 SEED: Optional[Union[float, int]] = 8795  # [Optional] Seed for running the simulation. Can be None.
@@ -17,11 +17,11 @@ DB_PORT: str = '5432'  # DDBB Port
 DB_DATABASE: str = 'mdrp_sim'  # DDBB Name
 
 # Simulation Constants
-SIMULATE_FROM: time = time(0, 0, 0)  # Simulate from this time on
-SIMULATE_UNTIL: time = time(23, 59, 59)  # Simulate until this time
-CREATE_USERS_UNTIL: time = time(22, 30, 0)  # Create new users to submit orders until this time
-CREATE_COURIERS_UNTIL: time = time(22, 0, 0)  # Create new couriers to log on until this time
-WARM_UP_TIME: float = hour_to_sec(4) + min_to_sec(30)  # Warm up time [sec] to achieve steady state simulation
+SIMULATE_FROM: time = time(7, 0, 0)  # Simulate from this time on
+SIMULATE_UNTIL: time = time(12, 0, 0)  # Simulate until this time
+CREATE_USERS_UNTIL: time = time(11, 0, 0)  # Create new users to submit orders until this time
+CREATE_COURIERS_UNTIL: time = time(9, 0, 0)  # Create new couriers to log on until this time
+WARM_UP_TIME: float = hour_to_sec(1) + min_to_sec(0)  # Warm up time [sec] to achieve steady state simulation
 
 # Simulation Policies
 #   Dispatcher
@@ -51,7 +51,7 @@ COURIER_EARNINGS_PER_HOUR: float = 8  # Rate at which the courier can be compens
 
 #   Dispatcher
 #       Cancellation Policy
-DISPATCHER_WAIT_TO_CANCEL: float = min_to_sec(35)  # Time [sec] to cancel an order
+DISPATCHER_WAIT_TO_CANCEL: float = min_to_sec(60)  # Time [sec] to cancel an order
 #       Buffering Policy
 DISPATCHER_ROLLING_HORIZON_TIME: float = min_to_sec(2)  # Time [sec] to buffer orders
 #       Prepositioning Evaluation Policy
@@ -67,7 +67,7 @@ DISPATCHER_DELAY_PENALTY: float = 0.4  # Constant penalty for delays in the pick
 
 #   User
 #       Cancellation Policy
-USER_WAIT_TO_CANCEL: float = min_to_sec(15)  # Time [sec] that a user waits before deciding to cancel an order
+USER_WAIT_TO_CANCEL: float = min_to_sec(45)  # Time [sec] that a user waits before deciding to cancel an order
 USER_CANCELLATION_PROBABILITY: float = 0.75  # Probability that a user will cancel an order if no courier is assigned
 
 # Object Constants

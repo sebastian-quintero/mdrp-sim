@@ -5,7 +5,7 @@ from utils.datetime_utils import min_to_sec, hour_to_sec
 
 # Project
 INSTANCES: List[int] = [
-    3, 4, 9, 10, 15, 16, 21, 23
+    0, 1, 2, 6, 7, 8, 12, 13, 14, 18, 19, 20
 ]  # Desired instances to be simulated
 VERBOSE_LOGS: bool = False  # Enable / Disable specific (verbose) actor and policy logs
 SEED: Optional[Union[float, int]] = 8795  # [Optional] Seed for running the simulation. Can be None.
@@ -17,11 +17,13 @@ DB_PORT: str = '5432'  # DDBB Port
 DB_DATABASE: str = 'mdrp_sim'  # DDBB Name
 
 # Simulation Constants
-SIMULATE_FROM: time = time(7, 0, 0)  # Simulate from this time on
-SIMULATE_UNTIL: time = time(12, 0, 0)  # Simulate until this time
-CREATE_USERS_UNTIL: time = time(11, 0, 0)  # Create new users to submit orders until this time
-CREATE_COURIERS_UNTIL: time = time(9, 0, 0)  # Create new couriers to log on until this time
-WARM_UP_TIME: float = hour_to_sec(1) + min_to_sec(0)  # Warm up time [sec] to achieve steady state simulation
+SIMULATE_FROM: time = time(10, 0, 0)  # Simulate from this time on
+SIMULATE_UNTIL: time = time(18, 0, 0)  # Simulate until this time
+CREATE_USERS_FROM: time = time(16, 0, 0)  # Create new users to submit orders from this time
+CREATE_USERS_UNTIL: time = time(16, 5, 0)  # Create new users to submit orders until this time
+CREATE_COURIERS_FROM: time = time(10, 0, 0)  # Create new couriers to log on from this time
+CREATE_COURIERS_UNTIL: time = time(10, 10, 0)  # Create new couriers to log on until this time
+WARM_UP_TIME: float = hour_to_sec(7) + min_to_sec(0)  # Warm up time [sec] to achieve steady state simulation
 
 # Simulation Policies
 #   Dispatcher
@@ -31,8 +33,8 @@ DISPATCHER_PREPOSITIONING_EVALUATION_POLICY: str = 'fixed'  # Policy for the pre
 DISPATCHER_PREPOSITIONING_POLICY: str = 'naive'  # Policy for prepositioning couriers. Options: ['naive']
 DISPATCHER_MATCHING_POLICY: str = 'greedy'  # Policy for matching orders and couriers. Options: ['greedy', 'mdrp', 'mdrp_graph', 'mdrp_graph_prospects', 'modified_mdrp']
 #   Courier
-COURIER_ACCEPTANCE_POLICY: str = 'absolute'  # Policy for accepting a notification. Options: ['uniform', 'absolute']
-COURIER_MOVEMENT_EVALUATION_POLICY: str = 'still'  # Policy to determine if the courier wants to relocate. Options: ['neighbors', 'still']
+COURIER_ACCEPTANCE_POLICY: str = 'uniform'  # Policy for accepting a notification. Options: ['uniform', 'absolute']
+COURIER_MOVEMENT_EVALUATION_POLICY: str = 'neighbors'  # Policy to determine if the courier wants to relocate. Options: ['neighbors', 'still']
 COURIER_MOVEMENT_POLICY: str = 'osrm'  # Policy that models the movement of a courier about the city. Options: ['osrm']
 #   User
 USER_CANCELLATION_POLICY: str = 'random'  # Policy to decide if a user wants to cancel an order. Options: ['random']

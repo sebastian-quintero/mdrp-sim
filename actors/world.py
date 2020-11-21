@@ -2,7 +2,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import time
 from os import system
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 
 import pandas as pd
 from simpy import Environment, Process
@@ -66,57 +66,48 @@ class World:
         """
 
         while True:
-            orders_info, should_log_orders = self._new_orders_info(current_time=sec_to_time(self.env.now))
+            orders_info = self._new_orders_info(current_time=sec_to_time(self.env.now))
             if orders_info is not None:
                 self._new_users_procedure(orders_info)
 
-            couriers_info, should_log_couriers = self._new_couriers_info(current_time=sec_to_time(self.env.now))
+            couriers_info = self._new_couriers_info(current_time=sec_to_time(self.env.now))
             if couriers_info is not None:
                 self._new_couriers_procedure(couriers_info)
 
-            if orders_info is not None or couriers_info is not None or should_log_orders or should_log_couriers:
-                logging.info(
-                    f'Instance {self.instance} | sim time = {sec_to_time(self.env.now)} '
-                    f'{world_log(self.dispatcher)}'
-                )
+            logging.info(
+                f'Instance {self.instance} | sim time = {sec_to_time(self.env.now)} '
+                f'{world_log(self.dispatcher)}'
+            )
 
             yield self.env.timeout(delay=1)
 
-    def _new_orders_info(self, current_time: time) -> Tuple[Optional[List[Dict[str, Any]]], bool]:
+    def _new_orders_info(self, current_time: time) -> Optional[List[Dict[str, Any]]]:
         """Method that returns the list of new users that log on at a given time"""
 
-        query = orders_query.format(
-            placement_time=time_to_query_format(current_time),
-            instance_id=self.instance
-        )
-        orders_df = pd.read_sql(sql=query, con=self.connection)
-
-        if not orders_df.empty and current_time <= settings.CREATE_USERS_UNTIL:
-            return orders_df.to_dict('records'), True
-
-        elif not orders_df.empty and current_time > settings.CREATE_USERS_UNTIL:
-            return None, True
-
+        if settings.CREATE_USERS_FROM <= current_time <= settings.CREATE_USERS_UNTIL:
+            query = orders_query.format(
+                placement_time=time_to_query_format(current_time),
+                instance_id=self.instance
+            )
+            orders_df = pd.read_sql(sql=query, con=self.connection)
         else:
-            return None, False
+            orders_df = pd.DataFrame()
 
-    def _new_couriers_info(self, current_time: time) -> Tuple[Optional[List[Dict[str, Any]]], bool]:
+        return orders_df.to_dict('records') if not orders_df.empty else None
+
+    def _new_couriers_info(self, current_time: time) -> Optional[List[Dict[str, Any]]]:
         """Method that returns the list of new couriers that log on at a given time"""
 
-        query = couriers_query.format(
-            on_time=time_to_query_format(current_time),
-            instance_id=self.instance
-        )
-        couriers_df = pd.read_sql(sql=query, con=self.connection)
-
-        if not couriers_df.empty and current_time <= settings.CREATE_COURIERS_UNTIL:
-            return couriers_df.to_dict('records'), True
-
-        elif not couriers_df.empty and current_time > settings.CREATE_COURIERS_UNTIL:
-            return None, True
-
+        if settings.CREATE_COURIERS_FROM <= current_time <= settings.CREATE_COURIERS_UNTIL:
+            query = couriers_query.format(
+                on_time=time_to_query_format(current_time),
+                instance_id=self.instance
+            )
+            couriers_df = pd.read_sql(sql=query, con=self.connection)
         else:
-            return None, False
+            couriers_df = pd.DataFrame()
+
+        return couriers_df.to_dict('records') if not couriers_df.empty else None
 
     def _new_users_procedure(self, orders_info: List[Dict[str, Any]]):
         """Method to establish how a new user is created in the World"""

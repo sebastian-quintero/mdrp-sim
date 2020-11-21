@@ -25,7 +25,7 @@ class OSRMService:
         url = cls.URL.format(lng_0=lng_0, lat_0=lat_0, lng_1=lng_1, lat_1=lat_1)
 
         try:
-            response = requests.get(url)
+            response = requests.get(url, timeout=5)
 
             if response and response.status_code in [requests.codes.ok, requests.codes.no_content]:
                 response_data = response.json()
@@ -45,7 +45,18 @@ class OSRMService:
         except:
             logging.exception('Exception captured in OSRMService.get_route. Check Docker.')
 
-            return Route(stops=[])
+            return Route(
+                stops=[
+                    Stop(
+                        location=origin,
+                        position=0
+                    ),
+                    Stop(
+                        location=destination,
+                        position=1
+                    )
+                ]
+            )
 
     @classmethod
     def estimate_route_properties(cls, origin: Location, route: Route, vehicle: Vehicle) -> Tuple[float, float]:
@@ -91,18 +102,30 @@ class OSRMService:
         try:
             travelling_route = cls.get_route(origin=origin, destination=destination)
 
-            for travelling_ix in range(len(travelling_route.stops) - 1):
-                distance = haversine(
-                    point1=travelling_route.stops[travelling_ix].location.coordinates,
-                    point2=travelling_route.stops[travelling_ix + 1].location.coordinates
-                )
-                time = int(distance / vehicle.average_velocity)
-
-                route_distance += distance
-                route_time += time
-
         except:
             logging.exception('Exception captured in OSRMService.estimate_travelling_properties. Check Docker.')
+            travelling_route = Route(
+                stops=[
+                    Stop(
+                        location=origin,
+                        position=0
+                    ),
+                    Stop(
+                        location=destination,
+                        position=1
+                    )
+                ]
+            )
+
+        for travelling_ix in range(len(travelling_route.stops) - 1):
+            distance = haversine(
+                point1=travelling_route.stops[travelling_ix].location.coordinates,
+                point2=travelling_route.stops[travelling_ix + 1].location.coordinates
+            )
+            time = int(distance / vehicle.average_velocity)
+
+            route_distance += distance
+            route_time += time
 
         return route_distance, route_time
 

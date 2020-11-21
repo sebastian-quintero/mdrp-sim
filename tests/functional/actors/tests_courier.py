@@ -280,7 +280,7 @@ class TestsCourier(unittest.TestCase):
         """Test to evaluate how a courier handles a notification while picking up and accepts it"""
 
         # Constants
-        random.seed(183)
+        random.seed(184)
         on_time = time(12, 0, 0)
         off_time = time(15, 0, 0)
 
@@ -386,8 +386,8 @@ class TestsCourier(unittest.TestCase):
                 new_order.order_id: new_order
             }
         )
-        self.assertEqual(courier.state, 'moving')
-        self.assertIn(courier.courier_id, dispatcher.moving_couriers.keys())
+        self.assertEqual(courier.state, 'idle')
+        self.assertIn(courier.courier_id, dispatcher.idle_couriers.keys())
 
     @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
     @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)

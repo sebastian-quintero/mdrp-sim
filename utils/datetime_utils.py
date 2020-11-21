@@ -15,6 +15,9 @@ def hour_to_sec(hours: float) -> Union[float, int]:
     return hours * 3600
 
 
+MAX_SECONDS = hour_to_sec(23) + min_to_sec(59) + 59
+
+
 def sec_to_hour(seconds: float) -> float:
     """Convert seconds to hours"""
 
@@ -34,7 +37,8 @@ def sec_to_time(seconds: int) -> time:
 
         return min(round(next_precision_frac(interval)), 59)
 
-    raw_hours = seconds / 3600
+    mod_seconds = MAX_SECONDS if seconds >= MAX_SECONDS else seconds
+    raw_hours = mod_seconds / 3600
 
     return time(
         hour=math.floor(raw_hours),

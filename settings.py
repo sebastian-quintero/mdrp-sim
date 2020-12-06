@@ -1,14 +1,7 @@
 from datetime import time
-from typing import Union, Optional, List
+from typing import Dict, Any
 
 from utils.datetime_utils import min_to_sec, hour_to_sec
-
-# Project
-INSTANCES: List[int] = [
-    0, 1, 2, 6, 7, 8, 12, 13, 14, 18, 19, 20
-]  # Desired instances to be simulated
-VERBOSE_LOGS: bool = False  # Enable / Disable specific (verbose) actor and policy logs
-SEED: Optional[Union[float, int]] = 8795  # [Optional] Seed for running the simulation. Can be None.
 
 DB_USERNAME: str = 'docker'  # DDBB Username
 DB_PASSWORD: str = 'docker'  # DDBB Password
@@ -16,64 +9,151 @@ DB_HOST: str = '127.0.0.1'  # DDBB Host
 DB_PORT: str = '5432'  # DDBB Port
 DB_DATABASE: str = 'mdrp_sim'  # DDBB Name
 
-# Simulation Constants
-SIMULATE_FROM: time = time(10, 0, 0)  # Simulate from this time on
-SIMULATE_UNTIL: time = time(18, 0, 0)  # Simulate until this time
-CREATE_USERS_FROM: time = time(16, 0, 0)  # Create new users to submit orders from this time
-CREATE_USERS_UNTIL: time = time(16, 5, 0)  # Create new users to submit orders until this time
-CREATE_COURIERS_FROM: time = time(10, 0, 0)  # Create new couriers to log on from this time
-CREATE_COURIERS_UNTIL: time = time(10, 10, 0)  # Create new couriers to log on until this time
-WARM_UP_TIME: float = hour_to_sec(7) + min_to_sec(0)  # Warm up time [sec] to achieve steady state simulation
 
-# Simulation Policies
-#   Dispatcher
-DISPATCHER_CANCELLATION_POLICY: str = 'static'  # Policy for canceling orders. Options: ['static']
-DISPATCHER_BUFFERING_POLICY: str = 'rolling_horizon'  # Policy for buffering orders: Options: ['rolling_horizon']
-DISPATCHER_PREPOSITIONING_EVALUATION_POLICY: str = 'fixed'  # Policy for the prepositioning timing. Options: ['fixed']
-DISPATCHER_PREPOSITIONING_POLICY: str = 'naive'  # Policy for prepositioning couriers. Options: ['naive']
-DISPATCHER_MATCHING_POLICY: str = 'greedy'  # Policy for matching orders and couriers. Options: ['greedy', 'mdrp', 'mdrp_graph', 'mdrp_graph_prospects', 'modified_mdrp']
-#   Courier
-COURIER_ACCEPTANCE_POLICY: str = 'uniform'  # Policy for accepting a notification. Options: ['uniform', 'absolute']
-COURIER_MOVEMENT_EVALUATION_POLICY: str = 'neighbors'  # Policy to determine if the courier wants to relocate. Options: ['neighbors', 'still']
-COURIER_MOVEMENT_POLICY: str = 'osrm'  # Policy that models the movement of a courier about the city. Options: ['osrm']
-#   User
-USER_CANCELLATION_POLICY: str = 'random'  # Policy to decide if a user wants to cancel an order. Options: ['random']
+class Settings:
+    def __init__(self, attributes: Dict[str, Any] = None):
+        self._attributes = attributes
 
-# Simulation Policies Configuration
-#   Courier
-#       Courier Acceptance Policy
-COURIER_MIN_ACCEPTANCE_RATE: float = 0.4  # Minimum acceptance rate for any courier
-COURIER_WAIT_TO_ACCEPT: float = 20  # Time [sec] that a courier waits before accepting / rejecting a notification
-#       Courier Movement Evaluation Policy
-COURIER_MOVEMENT_PROBABILITY: float = 0.4  # Probability that a courier WILL move
-COURIER_WAIT_TO_MOVE: float = min_to_sec(45)  # Time [sec] that a courier waits before deciding to move
-#       Other Constants
-COURIER_EARNINGS_PER_ORDER: float = 3  # Money earned for dropping off an order
-COURIER_EARNINGS_PER_HOUR: float = 8  # Rate at which the courier can be compensated per hour
+    @property
+    def attributes(self) -> Dict[str, Any]:
+        return self._attributes
 
-#   Dispatcher
-#       Cancellation Policy
-DISPATCHER_WAIT_TO_CANCEL: float = min_to_sec(60)  # Time [sec] to cancel an order
-#       Buffering Policy
-DISPATCHER_ROLLING_HORIZON_TIME: float = min_to_sec(2)  # Time [sec] to buffer orders
-#       Prepositioning Evaluation Policy
-DISPATCHER_PREPOSITIONING_TIME: float = hour_to_sec(1)  # Time [sec] to execute prepositioning
-#       Matching Policy
-DISPATCHER_PROSPECTS_MAX_DISTANCE: float = 3  # Maximum distance [km] between a courier and a store
-DISPATCHER_PROSPECTS_MAX_ORDERS: int = 3  # Maximum number of orders a courier can carry simultaneously
-DISPATCHER_PROSPECTS_MAX_STOP_OFFSET: float = min_to_sec(10)  # Max offset time [sec] from a stop's expected timestamp
-DISPATCHER_PROSPECTS_MAX_READY_TIME: float = min_to_sec(4)  # Time [sec] for ready route before avoiding stop offset
-DISPATCHER_MYOPIC_READY_TIME_SLACK: int = min_to_sec(10)  # Time [sec] to consider ready orders for target bundle size
-DISPATCHER_GEOHASH_PRECISION_GROUPING: int = 8  # Precision to group orders into a proxy of stores
-DISPATCHER_DELAY_PENALTY: float = 0.4  # Constant penalty for delays in the pick up of a bundle of orders
+    def __getattr__(self, attr):
+        return self._attributes.get(attr)
 
-#   User
-#       Cancellation Policy
-USER_WAIT_TO_CANCEL: float = min_to_sec(45)  # Time [sec] that a user waits before deciding to cancel an order
-USER_CANCELLATION_PROBABILITY: float = 0.75  # Probability that a user will cancel an order if no courier is assigned
 
-# Object Constants
-ORDER_MAX_PICK_UP_SERVICE_TIME: int = min_to_sec(10)  # Maximum service time [sec] at the pick up location
-ORDER_MAX_DROP_OFF_SERVICE_TIME: int = min_to_sec(5)  # Maximum service time [sec] at the drop off location
-ORDER_MIN_SERVICE_TIME: int = min_to_sec(2)  # Minimum service time [sec] at either a pick up or drop off location
-ORDER_TARGET_DROP_OFF_TIME: float = min_to_sec(40)  # Target time [sec] in which an order should be delivered
+SIMULATION_KEYS = [
+    'SIMULATE_FROM',
+    'SIMULATE_UNTIL',
+    'CREATE_USERS_FROM',
+    'CREATE_USERS_UNTIL',
+    'CREATE_COURIERS_FROM',
+    'CREATE_COURIERS_UNTIL',
+    'WARM_UP_TIME'
+]
+
+POLICIES_KEYS = [
+    'DISPATCHER_CANCELLATION_POLICY',
+    'DISPATCHER_BUFFERING_POLICY',
+    'DISPATCHER_PREPOSITIONING_EVALUATION_POLICY',
+    'DISPATCHER_PREPOSITIONING_POLICY',
+    'DISPATCHER_MATCHING_POLICY',
+    'COURIER_ACCEPTANCE_POLICY',
+    'COURIER_MOVEMENT_EVALUATION_POLICY',
+    'COURIER_MOVEMENT_POLICY',
+    'USER_CANCELLATION_POLICY'
+]
+
+# Settings for the simulation
+settings = Settings({
+    # Project
+    # --- List[int] = Desired instances to be simulated
+    'INSTANCES': [3],
+    # --- bool =  Enable / Disable specific (verbose) actor and policy logs
+    'VERBOSE_LOGS': False,
+    # --- Optional[Union[float, int]] = Seed for running the simulation. Can be None.
+    'SEED': 8795,
+
+    # Simulation Constants
+    # --- time =  Simulate from this time on
+    'SIMULATE_FROM': time(0, 0, 0),
+    # --- time =  Simulate until this time
+    'SIMULATE_UNTIL': time(10, 0, 0),
+    # --- time =  Create new users to submit orders from this time
+    'CREATE_USERS_FROM': time(9, 0, 0),
+    # --- time =  Create new users to submit orders until this time
+    'CREATE_USERS_UNTIL': time(9, 5, 0),
+    # --- time =  Create new couriers to log on from this time
+    'CREATE_COURIERS_FROM': time(0, 0, 0),
+    # --- time = Create new couriers to log on until this time
+    'CREATE_COURIERS_UNTIL': time(0, 5, 0),
+    # --- float = Warm up time [sec] to achieve steady state simulation
+    'WARM_UP_TIME': hour_to_sec(3) + min_to_sec(0),
+
+    # Simulation Policies - Dispatcher
+    # --- str = Policy for canceling orders. Options: ['static']
+    'DISPATCHER_CANCELLATION_POLICY': 'static',
+    # --- str = Policy for buffering orders. Options: ['rolling_horizon']
+    'DISPATCHER_BUFFERING_POLICY': 'rolling_horizon',
+    # --- str = Policy for deciding when to evaluate prepositioning. Options: ['fixed']
+    'DISPATCHER_PREPOSITIONING_EVALUATION_POLICY': 'fixed',
+    # --- str = Policy for executing prepositioning. Options: ['naive']
+    'DISPATCHER_PREPOSITIONING_POLICY': 'naive',
+    # --- str = Policy for matching. Options: ['greedy', 'mdrp', 'mdrp_graph', 'mdrp_graph_prospects', 'modified_mdrp']
+    'DISPATCHER_MATCHING_POLICY': 'mdrp',
+
+    # Simulation Policies - Courier
+    # --- str = Policy for accepting a notification. Options: ['uniform', 'absolute']
+    'COURIER_ACCEPTANCE_POLICY': 'uniform',
+    # --- str = Policy to determine if the courier wants to relocate. Options: ['neighbors', 'still']
+    'COURIER_MOVEMENT_EVALUATION_POLICY': 'neighbors',
+    # --- str = Policy that models the movement of a courier about the city. Options: ['osrm']
+    'COURIER_MOVEMENT_POLICY': 'osrm',
+
+    # Simulation Policies - User
+    # --- str = Policy to decide if a user wants to cancel an order. Options: ['random']
+    'USER_CANCELLATION_POLICY': 'random',
+
+    # Simulation Policies Configuration - Courier - Acceptance Policy
+    # --- float = Minimum acceptance rate for any courier
+    'COURIER_MIN_ACCEPTANCE_RATE': 0.4,
+    # --- float = Time [sec] that a courier waits before accepting / rejecting a notification
+    'COURIER_WAIT_TO_ACCEPT': 20,
+
+    # Simulation Policies Configuration - Courier - Movement Evaluation Policy
+    # float = Probability that a courier WILL move
+    'COURIER_MOVEMENT_PROBABILITY': 0.4,
+    #  float = Time [sec] that a courier waits before deciding to move
+    'COURIER_WAIT_TO_MOVE': min_to_sec(45),
+
+    # Simulation Policies Configuration - Courier - Other Constants
+    # float = Money earned for dropping off an order
+    'COURIER_EARNINGS_PER_ORDER': 3,
+    # float = Rate at which the courier can be compensated per hour
+    'COURIER_EARNINGS_PER_HOUR': 8,
+
+    # Simulation Policies Configuration - Dispatcher - Cancellation Policy
+    # float = Time [sec] to cancel an order
+    'DISPATCHER_WAIT_TO_CANCEL': min_to_sec(60),
+
+    # Simulation Policies Configuration - Dispatcher - Buffering Policy
+    # float = Time [sec] to buffer orders
+    'DISPATCHER_ROLLING_HORIZON_TIME': min_to_sec(2),
+
+    # Simulation Policies Configuration - Dispatcher - Prepositioning Evaluation Policy
+    # float = Time [sec] to execute prepositioning
+    'DISPATCHER_PREPOSITIONING_TIME': hour_to_sec(1),
+
+    # Simulation Policies Configuration - Dispatcher - Matching Policy
+    # float = Maximum distance [km] between a courier and a store
+    'DISPATCHER_PROSPECTS_MAX_DISTANCE': 3,
+    # int = Maximum number of orders a courier can carry simultaneously
+    'DISPATCHER_PROSPECTS_MAX_ORDERS': 3,
+    # float = Max offset time [sec] from a stop's expected timestamp
+    'DISPATCHER_PROSPECTS_MAX_STOP_OFFSET': min_to_sec(10),
+    # float = Time [sec] for ready route before avoiding stop offset
+    'DISPATCHER_PROSPECTS_MAX_READY_TIME': min_to_sec(4),
+    # int = Time [sec] to consider ready orders for target bundle size
+    'DISPATCHER_MYOPIC_READY_TIME_SLACK': min_to_sec(10),
+    # int = Precision to group orders into a proxy of stores
+    'DISPATCHER_GEOHASH_PRECISION_GROUPING': 8,
+    # float = Constant penalty for delays in the pick up of a bundle of orders
+    'DISPATCHER_DELAY_PENALTY': 0.4,
+
+    # Simulation Policies Configuration - User - Cancellation Policy
+    # float = Time [sec] that a user waits before deciding to cancel an order
+    'USER_WAIT_TO_CANCEL': min_to_sec(45),
+    # float = Probability that a user will cancel an order if no courier is assigned
+    'USER_CANCELLATION_PROBABILITY': 0.75,
+
+    # Object Constants
+    # int = Maximum service time [sec] at the pick up location
+    'ORDER_MAX_PICK_UP_SERVICE_TIME': min_to_sec(10),
+    # int =  Maximum service time [sec] at the drop off location
+    'ORDER_MAX_DROP_OFF_SERVICE_TIME': min_to_sec(5),
+    # int = Minimum service time [sec] at either a pick up or drop off location
+    'ORDER_MIN_SERVICE_TIME': min_to_sec(2),
+    # float = Target time [sec] in which an order should be delivered
+    'ORDER_TARGET_DROP_OFF_TIME': min_to_sec(40),
+
+})

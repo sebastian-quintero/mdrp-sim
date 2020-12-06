@@ -23,7 +23,7 @@ from utils.datetime_utils import time_to_sec, hour_to_sec, min_to_sec
 class TestsMyopicMatchingPolicy(unittest.TestCase):
     """Tests for the greedy matching policy class"""
 
-    @patch('settings.DISPATCHER_GEOHASH_PRECISION_GROUPING', 7)
+    @patch('settings.settings.DISPATCHER_GEOHASH_PRECISION_GROUPING', 7)
     def test_group_by_geohash(self):
         """Test to verify how the target bundle size is calculated"""
 
@@ -40,7 +40,7 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
         self.assertIn(order_2, groups.get('d2g6dgd'))
         self.assertIn(order_3, groups.get('d2g6g68'))
 
-    @patch('settings.DISPATCHER_MYOPIC_READY_TIME_SLACK', 0)
+    @patch('settings.settings.DISPATCHER_MYOPIC_READY_TIME_SLACK', 0)
     def test_calculate_target_bundle_size(self):
         """"Test to verify the target bundle size is correctly calculated"""
 
@@ -51,9 +51,9 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
         env_time = time_to_sec(time(15, 20, 0))
 
         # Test case 1: create more couriers than orders
-        courier_1 = Courier(courier_id=1, on_time=on_time, off_time=off_time, state='idle')
-        courier_2 = Courier(courier_id=2, on_time=on_time, off_time=off_time, state='idle')
-        courier_3 = Courier(courier_id=3, on_time=on_time, off_time=off_time, state='idle')
+        courier_1 = Courier(courier_id=1, on_time=on_time, off_time=off_time, condition='idle')
+        courier_2 = Courier(courier_id=2, on_time=on_time, off_time=off_time, condition='idle')
+        courier_3 = Courier(courier_id=3, on_time=on_time, off_time=off_time, condition='idle')
 
         order_1 = Order(order_id=1, ready_time=ready_time)
 
@@ -66,7 +66,7 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
         self.assertEqual(target_size, 1)
 
         # Test case 2: create more orders than couriers
-        courier_1 = Courier(courier_id=1, on_time=on_time, off_time=off_time, state='idle')
+        courier_1 = Courier(courier_id=1, on_time=on_time, off_time=off_time, condition='idle')
 
         order_1 = Order(order_id=1, ready_time=ready_time)
         order_2 = Order(order_id=2, ready_time=ready_time)
@@ -81,7 +81,7 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
         self.assertEqual(target_size, 3)
 
         # Test case 3: create more orders than couriers but couriers are idle
-        courier_1 = Courier(courier_id=1, on_time=on_time, off_time=off_time, state='moving')
+        courier_1 = Courier(courier_id=1, on_time=on_time, off_time=off_time, condition='moving')
 
         order_2 = Order(order_id=2, ready_time=ready_time)
         order_3 = Order(order_id=3, ready_time=ready_time)
@@ -95,7 +95,7 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
         self.assertEqual(target_size, 1)
 
     @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
-    @patch('settings.DISPATCHER_PROSPECTS_MAX_ORDERS', 1)
+    @patch('settings.settings.DISPATCHER_PROSPECTS_MAX_ORDERS', 1)
     def test_generate_group_routes(self, osrm):
         """Test to verify how the heuristic to generate routes work"""
 
@@ -209,7 +209,7 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
             self.assertIn(order.order_id, routed_orders)
 
     @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
-    @patch('settings.DISPATCHER_MYOPIC_READY_TIME_SLACK', min_to_sec(20))
+    @patch('settings.settings.DISPATCHER_MYOPIC_READY_TIME_SLACK', min_to_sec(20))
     def test_generate_routes_idle_couriers(self, osrm):
         """Test to verify how routes are created from test orders and couriers"""
 
@@ -261,14 +261,14 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
             courier_id=1,
             on_time=on_time,
             off_time=off_time,
-            state='idle',
+            condition='idle',
             location=Location(lat=4.676854, lng=-74.057498)
         )
         courier_2 = Courier(
             courier_id=2,
             on_time=on_time,
             off_time=off_time,
-            state='idle',
+            condition='idle',
             location=Location(lat=4.679408, lng=-74.052524)
         )
 
@@ -292,7 +292,7 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
         self.assertIn(order_4.order_id, routes[1].orders.keys())
 
     @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
-    @patch('settings.DISPATCHER_MYOPIC_READY_TIME_SLACK', min_to_sec(20))
+    @patch('settings.settings.DISPATCHER_MYOPIC_READY_TIME_SLACK', min_to_sec(20))
     def test_generate_routes_picking_up_couriers(self, osrm):
         """Test to verify how routes are created from test orders and couriers"""
 
@@ -336,7 +336,7 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
             courier_id=3,
             on_time=on_time,
             off_time=off_time,
-            state='picking_up',
+            condition='picking_up',
             location=order_3.pick_up_at,
             active_route=Route(
                 orders={order_3.order_id: order_3},
@@ -381,7 +381,7 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
         self.assertIsNone(routes[1].initial_prospect)
 
     @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
-    @patch('settings.DISPATCHER_PROSPECTS_MAX_STOP_OFFSET', min_to_sec(15))
+    @patch('settings.settings.DISPATCHER_PROSPECTS_MAX_STOP_OFFSET', min_to_sec(15))
     def test_generate_matching_prospects_all(self, osrm):
         """Test to verify how prospects are created"""
 
@@ -433,14 +433,14 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
             courier_id=1,
             on_time=on_time,
             off_time=off_time,
-            state='idle',
+            condition='idle',
             location=Location(lat=4.676854, lng=-74.057498)
         )
         courier_2 = Courier(
             courier_id=2,
             on_time=on_time,
             off_time=off_time,
-            state='idle',
+            condition='idle',
             location=Location(lat=4.679408, lng=-74.052524)
         )
 
@@ -467,7 +467,7 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
         self.assertEqual(len(prospects), 8)
 
     @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
-    @patch('settings.DISPATCHER_PROSPECTS_MAX_STOP_OFFSET', min_to_sec(15))
+    @patch('settings.settings.DISPATCHER_PROSPECTS_MAX_STOP_OFFSET', min_to_sec(15))
     def test_generate_matching_prospects_picking_up_couriers(self, osrm):
         """Test to verify how prospects are created"""
 
@@ -510,7 +510,7 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
             courier_id=3,
             on_time=on_time,
             off_time=off_time,
-            state='picking_up',
+            condition='picking_up',
             location=order_3.pick_up_at,
             active_route=Route(
                 orders={order_3.order_id: order_3},
@@ -559,8 +559,8 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
         self.assertFalse(prospects.tolist())
 
     @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
-    @patch('settings.DISPATCHER_PROSPECTS_MAX_STOP_OFFSET', min_to_sec(15))
-    @patch('settings.DISPATCHER_MYOPIC_READY_TIME_SLACK', min_to_sec(20))
+    @patch('settings.settings.DISPATCHER_PROSPECTS_MAX_STOP_OFFSET', min_to_sec(15))
+    @patch('settings.settings.DISPATCHER_MYOPIC_READY_TIME_SLACK', min_to_sec(20))
     def test_myopic_matching_policy_execute(self, osrm):
         """Test to verify how the optimization model is solved"""
 
@@ -613,21 +613,21 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
             courier_id=1,
             on_time=on_time,
             off_time=off_time,
-            state='idle',
+            condition='idle',
             location=Location(lat=4.676854, lng=-74.057498)
         )
         courier_2 = Courier(
             courier_id=2,
             on_time=on_time,
             off_time=off_time,
-            state='idle',
+            condition='idle',
             location=Location(lat=4.679408, lng=-74.052524)
         )
         courier_3 = Courier(
             courier_id=3,
             on_time=on_time,
             off_time=off_time,
-            state='picking_up',
+            condition='picking_up',
             location=order_3.pick_up_at,
             active_route=Route(
                 orders={order_3.order_id: order_3},
@@ -734,8 +734,8 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
         self.assertIn(order_4.order_id, notifications[0].instruction[0].orders.keys())
 
     @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
-    @patch('settings.DISPATCHER_PROSPECTS_MAX_STOP_OFFSET', min_to_sec(15))
-    @patch('settings.DISPATCHER_MYOPIC_READY_TIME_SLACK', min_to_sec(20))
+    @patch('settings.settings.DISPATCHER_PROSPECTS_MAX_STOP_OFFSET', min_to_sec(15))
+    @patch('settings.settings.DISPATCHER_MYOPIC_READY_TIME_SLACK', min_to_sec(20))
     def test_myopic_matching_policy_execute_mip_matcher(self, osrm):
         """Test to verify how the optimization model is solved with a MIP approach"""
 
@@ -788,21 +788,21 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
             courier_id=1,
             on_time=on_time,
             off_time=off_time,
-            state='idle',
+            condition='idle',
             location=Location(lat=4.676854, lng=-74.057498)
         )
         courier_2 = Courier(
             courier_id=2,
             on_time=on_time,
             off_time=off_time,
-            state='idle',
+            condition='idle',
             location=Location(lat=4.679408, lng=-74.052524)
         )
         courier_3 = Courier(
             courier_id=3,
             on_time=on_time,
             off_time=off_time,
-            state='picking_up',
+            condition='picking_up',
             location=order_3.pick_up_at,
             active_route=Route(
                 orders={order_3.order_id: order_3},

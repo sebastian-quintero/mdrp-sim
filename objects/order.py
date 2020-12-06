@@ -1,12 +1,13 @@
 import random
 from dataclasses import dataclass, field
 from datetime import time
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 
 from geohash import encode
 
-import settings
 from objects.location import Location
+from settings import settings
+from utils.datetime_utils import time_diff
 
 
 @dataclass
@@ -16,8 +17,8 @@ class Order:
     order_id: Optional[int] = None
     courier_id: Optional[int] = None
     drop_off_at: Optional[Location] = None
-    rejected_by: Optional[List[int]] = field(default_factory=lambda: list())
     pick_up_at: Optional[Location] = None
+    rejected_by: Optional[List[int]] = field(default_factory=lambda: list())
     state: Optional[str] = ''
     user: Optional[Any] = None
 
@@ -51,3 +52,47 @@ class Order:
             if self.pick_up_at is not None
             else ''
         )
+
+    def calculate_metrics(self) -> Dict[str, Any]:
+        """Method to calculate the metrics of an order"""
+
+        dropped_off = bool(self.drop_off_time)
+
+        if dropped_off:
+            click_to_door_time = time_diff(self.drop_off_time, self.placement_time)
+            click_to_taken_time = time_diff(self.acceptance_time, self.placement_time)
+            ready_to_door_time = time_diff(self.drop_off_time, self.ready_time)
+            ready_to_pickup_time = time_diff(self.pick_up_time, self.ready_time)
+            in_store_to_pickup_time = time_diff(self.pick_up_time, self.in_store_time)
+            drop_off_lateness_time = time_diff(self.drop_off_time, self.expected_drop_off_time)
+            click_to_cancel_time = None
+
+        else:
+            click_to_door_time = None
+            click_to_taken_time = None
+            ready_to_door_time = None
+            ready_to_pickup_time = None
+            in_store_to_pickup_time = None
+            drop_off_lateness_time = None
+            click_to_cancel_time = time_diff(self.cancellation_time, self.preparation_time)
+
+        return {
+            'order_id': self.order_id,
+            'placement_time': self.placement_time,
+            'preparation_time': self.preparation_time,
+            'acceptance_time': self.acceptance_time,
+            'in_store_time': self.in_store_time,
+            'ready_time': self.ready_time,
+            'pick_up_time': self.pick_up_time,
+            'drop_off_time': self.drop_off_time,
+            'expected_drop_off_time': self.expected_drop_off_time,
+            'cancellation_time': self.cancellation_time,
+            'dropped_off': dropped_off,
+            'click_to_door_time': click_to_door_time,
+            'click_to_taken_time': click_to_taken_time,
+            'ready_to_door_time': ready_to_door_time,
+            'ready_to_pick_up_time': ready_to_pickup_time,
+            'in_store_to_pick_up_time': in_store_to_pickup_time,
+            'drop_off_lateness_time': drop_off_lateness_time,
+            'click_to_cancel_time': click_to_cancel_time
+        }

@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from simpy import Environment
 
-import settings
+from settings import settings
 from actors.courier import Courier
 from actors.dispatcher import Dispatcher
 from actors.user import User
@@ -43,7 +43,7 @@ class TestsCourier(unittest.TestCase):
     movement_evaluation_policy = NeighborsMoveEvalPolicy()
     movement_policy = OSRMMovementPolicy()
 
-    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    @patch('settings.settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
     @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
     def test_always_idle(self, osrm):
         """Test to evaluate a courier never moving"""
@@ -73,14 +73,14 @@ class TestsCourier(unittest.TestCase):
         env.run(until=hour_to_sec(4))
 
         # Asserts that the courier is idle and never moved
-        self.assertEqual(courier.state, 'idle')
+        self.assertEqual(courier.condition, 'idle')
         self.assertEqual(courier.location, self.start_location)
         self.assertIn(courier.courier_id, dispatcher.idle_couriers.keys())
 
     @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
-    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.95)
-    @patch('settings.COURIER_WAIT_TO_MOVE', min_to_sec(7))
-    def test_movement_process(self, osrm):
+    @patch('settings.settings.COURIER_MOVEMENT_PROBABILITY', 0.95)
+    @patch('settings.settings.COURIER_WAIT_TO_MOVE', min_to_sec(7))
+    def test_movement_state(self, osrm):
         """Test to evaluate how a courier moves with dummy movement"""
 
         # Constants
@@ -107,13 +107,13 @@ class TestsCourier(unittest.TestCase):
         env.run(until=hour_to_sec(4) + min_to_sec(5))
 
         # Asserts that the courier moved and is is in a different location
-        self.assertEqual(courier.state, 'moving')
+        self.assertEqual(courier.condition, 'moving')
         self.assertNotEqual(courier.location, self.start_location)
         self.assertIn(courier.courier_id, dispatcher.moving_couriers.keys())
 
     @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
-    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.1)
-    @patch('settings.COURIER_MIN_ACCEPTANCE_RATE', 0.99)
+    @patch('settings.settings.COURIER_MOVEMENT_PROBABILITY', 0.1)
+    @patch('settings.settings.COURIER_MIN_ACCEPTANCE_RATE', 0.99)
     def test_notify_event_accept_idle(self, osrm):
         """Test to evaluate how a courier handles a notification while being idle and accepts it"""
 
@@ -190,12 +190,12 @@ class TestsCourier(unittest.TestCase):
         self.assertEqual(dispatcher.fulfilled_orders, {order.order_id: order})
         self.assertEqual(order.state, 'dropped_off')
         self.assertNotEqual(courier.location, self.start_location)
-        self.assertEqual(courier.state, 'idle')
+        self.assertEqual(courier.condition, 'idle')
         self.assertIn(courier.courier_id, dispatcher.idle_couriers.keys())
 
     @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
-    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.1)
-    @patch('settings.COURIER_MIN_ACCEPTANCE_RATE', 0.99)
+    @patch('settings.settings.COURIER_MOVEMENT_PROBABILITY', 0.1)
+    @patch('settings.settings.COURIER_MIN_ACCEPTANCE_RATE', 0.99)
     def test_notify_event_reject_idle(self, osrm):
         """Test to evaluate how a courier handles a notification while being idle and rejects it"""
 
@@ -270,12 +270,12 @@ class TestsCourier(unittest.TestCase):
         self.assertEqual(dispatcher.unassigned_orders, {order.order_id: order})
         self.assertEqual(order.state, 'unassigned')
         self.assertEqual(courier.location, self.start_location)
-        self.assertEqual(courier.state, 'idle')
+        self.assertEqual(courier.condition, 'idle')
         self.assertIn(courier.courier_id, dispatcher.idle_couriers.keys())
 
     @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
-    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.99)
-    @patch('settings.COURIER_MIN_ACCEPTANCE_RATE', 0.99)
+    @patch('settings.settings.COURIER_MOVEMENT_PROBABILITY', 0.99)
+    @patch('settings.settings.COURIER_MIN_ACCEPTANCE_RATE', 0.99)
     def test_notify_event_accept_picking_up(self, osrm):
         """Test to evaluate how a courier handles a notification while picking up and accepts it"""
 
@@ -288,7 +288,7 @@ class TestsCourier(unittest.TestCase):
         env = Environment(initial_time=hour_to_sec(12) + min_to_sec(12))
         dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
 
-        # Creates a courier with high acceptance rate, an active route and in process of picking up.
+        # Creates a courier with high acceptance rate, an active route and in state of picking up.
         # Sends a new instruction, composed of a single new order
         active_order = Order(
             order_id=self.order_id,
@@ -357,9 +357,9 @@ class TestsCourier(unittest.TestCase):
             courier=courier,
             instruction=instruction
         )
-        courier.process.interrupt()
+        courier.state.interrupt()
         courier.active_stop = courier.active_route.stops[0]
-        courier.process = env.process(courier._picking_up_process(orders={active_order.order_id: active_order}))
+        courier.state = env.process(courier._picking_up_state(orders={active_order.order_id: active_order}))
         env.process(courier.notification_event(notification))
         env.run(until=hour_to_sec(13) + min_to_sec(12))
 
@@ -386,12 +386,12 @@ class TestsCourier(unittest.TestCase):
                 new_order.order_id: new_order
             }
         )
-        self.assertEqual(courier.state, 'idle')
+        self.assertEqual(courier.condition, 'idle')
         self.assertIn(courier.courier_id, dispatcher.idle_couriers.keys())
 
     @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
-    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
-    @patch('settings.COURIER_MIN_ACCEPTANCE_RATE', 0.99)
+    @patch('settings.settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    @patch('settings.settings.COURIER_MIN_ACCEPTANCE_RATE', 0.99)
     def test_notify_event_reject_picking_up(self, osrm):
         """Test to evaluate how a courier handles a notification while picking up and rejects it"""
 
@@ -404,7 +404,7 @@ class TestsCourier(unittest.TestCase):
         env = Environment(initial_time=hour_to_sec(12) + min_to_sec(12))
         dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
 
-        # Creates a courier with low acceptance rate, an active route and in process of picking up.
+        # Creates a courier with low acceptance rate, an active route and in state of picking up.
         # Sends a new instruction, composed of a single new order
         active_order = Order(
             order_id=self.order_id,
@@ -473,9 +473,9 @@ class TestsCourier(unittest.TestCase):
             courier=courier,
             instruction=instruction
         )
-        courier.process.interrupt()
+        courier.state.interrupt()
         courier.active_stop = courier.active_route.stops[0]
-        courier.process = env.process(courier._picking_up_process(orders={active_order.order_id: active_order}))
+        courier.state = env.process(courier._picking_up_state(orders={active_order.order_id: active_order}))
         env.process(courier.notification_event(notification))
         env.run(until=hour_to_sec(14))
 
@@ -501,10 +501,10 @@ class TestsCourier(unittest.TestCase):
         self.assertNotEqual(courier.location, self.start_location)
         self.assertEqual(dispatcher.fulfilled_orders, {active_order.order_id: active_order})
         self.assertEqual(dispatcher.unassigned_orders, {new_order.order_id: new_order})
-        self.assertEqual(courier.state, 'idle')
+        self.assertEqual(courier.condition, 'idle')
         self.assertIn(courier.courier_id, dispatcher.idle_couriers.keys())
 
-    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    @patch('settings.settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
     def test_log_off(self):
         """Test to evaluate the scheduling of the courier logging off works correctly"""
 
@@ -530,7 +530,7 @@ class TestsCourier(unittest.TestCase):
         env.run(until=initial_time + hour_to_sec(10))
         self.assertEqual(dispatcher.logged_off_couriers, {courier.courier_id: courier})
         self.assertEqual(dispatcher.idle_couriers, {})
-        self.assertEqual(courier.state, 'logged_off')
+        self.assertEqual(courier.condition, 'logged_off')
 
         # Test 2: the courier doesn't achieve the log off because the simulation ends before
         env = Environment(initial_time=initial_time)
@@ -545,11 +545,11 @@ class TestsCourier(unittest.TestCase):
         env.run(until=initial_time + hour_to_sec(2))
         self.assertEqual(dispatcher.idle_couriers, {courier.courier_id: courier})
         self.assertEqual(dispatcher.logged_off_couriers, {})
-        self.assertEqual(courier.state, 'idle')
+        self.assertEqual(courier.condition, 'idle')
 
-    @patch('settings.COURIER_EARNINGS_PER_ORDER', 3)
-    @patch('settings.COURIER_EARNINGS_PER_HOUR', 8)
-    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    @patch('settings.settings.COURIER_EARNINGS_PER_ORDER', 3)
+    @patch('settings.settings.COURIER_EARNINGS_PER_HOUR', 8)
+    @patch('settings.settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
     def test_calculate_earnings(self):
         """Test to verify the mechanics of calculating the shift's earnings"""
 
@@ -584,7 +584,7 @@ class TestsCourier(unittest.TestCase):
         )
 
     @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
-    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.1)
+    @patch('settings.settings.COURIER_MOVEMENT_PROBABILITY', 0.1)
     def test_notify_prepositioning_event_accept_idle(self, osrm):
         """Test to evaluate how a courier handles a prepositioning notification while being idle and accepts it"""
 
@@ -635,11 +635,11 @@ class TestsCourier(unittest.TestCase):
         self.assertIsNone(courier.active_stop)
         self.assertEqual(dispatcher.fulfilled_orders, {})
         self.assertNotEqual(courier.location, self.start_location)
-        self.assertEqual(courier.state, 'idle')
+        self.assertEqual(courier.condition, 'idle')
         self.assertIn(courier.courier_id, dispatcher.idle_couriers.keys())
 
     @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
-    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    @patch('settings.settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
     def test_notify_prepositioning_event_reject_idle(self, osrm):
         """Test to evaluate how a courier handles a prepositioning notification while being idle and rejects it"""
 
@@ -686,11 +686,11 @@ class TestsCourier(unittest.TestCase):
         self.assertIsNone(courier.active_route)
         self.assertIsNone(courier.active_stop)
         self.assertEqual(courier.location, self.start_location)
-        self.assertEqual(courier.state, 'idle')
+        self.assertEqual(courier.condition, 'idle')
         self.assertIn(courier.courier_id, dispatcher.idle_couriers.keys())
 
     @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
-    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    @patch('settings.settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
     def test_pick_up_waiting_time(self, osrm):
         """Test to verify the mechanics of the waiting time are correctly designed"""
 
@@ -720,7 +720,7 @@ class TestsCourier(unittest.TestCase):
         order = Order(ready_time=time(6, 15, 0), order_id=23)
         stop = Stop(orders={order.order_id: order}, type=StopType.PICK_UP)
         env.process(courier._execute_stop(stop))
-        dispatcher.process.interrupt()
+        dispatcher.state.interrupt()
 
         # Run until there are no more events and assert the courier experienced waiting time.
         env.run(until=hour_to_sec(7))
@@ -745,7 +745,7 @@ class TestsCourier(unittest.TestCase):
         order = Order(ready_time=time(4, 0, 0), order_id=23)
         stop = Stop(orders={order.order_id: order}, type=StopType.PICK_UP)
         env.process(courier._execute_stop(stop))
-        dispatcher.process.interrupt()
+        dispatcher.state.interrupt()
         env.run(until=hour_to_sec(7))
         self.assertTrue(
             time(order.pick_up_time.hour, order.pick_up_time.minute) <= time(6, int(order.pick_up_service_time / 60))

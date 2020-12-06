@@ -1,4 +1,4 @@
-import settings
+from settings import settings
 from policies.dispatcher.prepositioning_evaluation.dispatcher_prepositioning_evaluation_policy import \
     DispatcherPrepositioningEvaluationPolicy
 

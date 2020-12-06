@@ -1,6 +1,6 @@
 import random
 
-import settings
+from settings import settings
 from policies.user.cancellation.user_cancellation_policy import UserCancellationPolicy
 
 

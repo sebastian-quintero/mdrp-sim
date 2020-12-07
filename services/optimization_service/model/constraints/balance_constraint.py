@@ -1,6 +1,7 @@
-from typing import List
+from typing import List, Union
 
 import numpy as np
+from gurobipy import Constr
 from pulp import LpConstraint
 
 from services.optimization_service.graph.graph import Graph
@@ -10,7 +11,7 @@ from services.optimization_service.model.constraints.model_constraint import Mod
 class BalanceConstraint(ModelConstraint):
     """Class containing the main balance constraint for a network flow formulation"""
 
-    def express(self, graph: Graph, variable_set: np.ndarray) -> List[LpConstraint]:
+    def express(self, graph: Graph, variable_set: np.ndarray) -> List[Union[LpConstraint, Constr]]:
         """Expression of the balance constraint"""
 
         demands = graph.nodes['demand']

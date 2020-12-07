@@ -1,6 +1,7 @@
-from typing import List
+from typing import List, Union
 
 import numpy as np
+from gurobipy import Constr
 from pulp import LpConstraint
 
 from services.optimization_service.model.constraints.model_constraint import ModelConstraint
@@ -10,7 +11,7 @@ from services.optimization_service.problem.matching_problem import MatchingProbl
 class CourierAssignmentConstraint(ModelConstraint):
     """Class containing the constraint that limits the assignments per courier"""
 
-    def express(self, problem: MatchingProblem, variable_set: np.ndarray) -> List[LpConstraint]:
+    def express(self, problem: MatchingProblem, variable_set: np.ndarray) -> List[Union[LpConstraint, Constr]]:
         """Expression of the constraint"""
 
         unique_couriers = np.unique(problem.matching_prospects['i'])

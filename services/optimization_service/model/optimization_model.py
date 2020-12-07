@@ -1,8 +1,9 @@
 from dataclasses import dataclass
-from typing import List
+from typing import List, Union, Optional
 
 import numpy as np
-from pulp import LpMinimize, LpMaximize, LpProblem, LpConstraint, LpVariable, value, LpStatus, PULP_CBC_CMD
+from gurobipy import GRB, Model, Var, Constr
+from pulp import LpProblem, LpConstraint, LpVariable, value, PULP_CBC_CMD, LpStatusOptimal
 
 SOLUTION_VALUE = 0.99
 
@@ -11,29 +12,43 @@ SOLUTION_VALUE = 0.99
 class OptimizationModel:
     """Class that defines an optimization model to be solved"""
 
-    variable_set: np.ndarray
+    constraints: List[Union[LpConstraint, Constr]]
+    engine_model: Optional[Union[LpProblem, Model]]
     objective: np.ndarray
-    constraints: List[LpConstraint]
-    sense: str
+    optimizer: str
+    sense: int
+    variable_set: np.ndarray
 
     def solve(self):
         """Method for solving the optimization model"""
 
-        sense = LpMinimize if self.sense == 'min' else LpMaximize
-        prob = LpProblem('problem', sense)
+        if self.optimizer == 'pulp':
+            for constraint in self.constraints:
+                self.engine_model += constraint
 
-        for constraint in self.constraints:
-            prob += constraint
+            self.engine_model += self.objective
+            status = self.engine_model.solve(PULP_CBC_CMD(msg=False))
+            solution = (
+                np.vectorize(self._var_sol)(self.variable_set)
+                if status == LpStatusOptimal
+                else np.array([])
+            )
 
-        prob += self.objective
+        else:
+            for constraint in self.constraints:
+                self.engine_model.addConstr(constraint)
 
-        status = prob.solve(PULP_CBC_CMD(msg=False))
-        solution = np.vectorize(self._var_sol)(self.variable_set) if LpStatus[status] == 'Optimal' else np.array([])
+            self.engine_model.setObjective(self.objective, self.sense)
+            self.engine_model.optimize()
+            solution = (
+                np.vectorize(self._var_sol)(self.variable_set)
+                if self.engine_model.status == GRB.OPTIMAL
+                else np.array([])
+            )
 
         return solution
 
-    @staticmethod
-    def _var_sol(var: LpVariable) -> float:
+    def _var_sol(self, var: Union[LpVariable, Var]) -> float:
         """Method to obtain the solution of a decision variable"""
 
-        return value(var)
+        return value(var) if self.optimizer == 'pulp' else var.x

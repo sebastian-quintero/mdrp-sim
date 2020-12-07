@@ -30,11 +30,13 @@ from utils.datetime_utils import time_to_sec, sec_to_time, time_diff
 
 GRAPH_MODEL_BUILDER = GraphOptimizationModelBuilder(
     sense='max',
-    model_constraints=[BalanceConstraint()]
+    model_constraints=[BalanceConstraint()],
+    optimizer=settings.OPTIMIZER
 )
 MIP_MODEL_BUILDER = MIPOptimizationModelBuilder(
     sense='max',
-    model_constraints=[CourierAssignmentConstraint(), RouteAssignmentConstraint()]
+    model_constraints=[CourierAssignmentConstraint(), RouteAssignmentConstraint()],
+    optimizer=settings.OPTIMIZER
 )
 
 
@@ -83,7 +85,9 @@ class MyopicMatchingPolicy(DispatcherMatchingPolicy):
                 variable_set=np.array([]),
                 objective=np.array([]),
                 constraints=[],
-                sense=''
+                sense=0,
+                optimizer='',
+                engine_model=None
             )
             notifications = []
 

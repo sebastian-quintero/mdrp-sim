@@ -1,5 +1,8 @@
+from typing import Union
+
 import numpy as np
-from pulp import LpVariable, LpBinary
+from pulp import LpVariable, LpBinary, LpProblem
+from gurobipy import Model, Var, GRB
 
 from services.optimization_service.model.model_builder import OptimizationModelBuilder
 from services.optimization_service.problem.matching_problem import MatchingProblem
@@ -8,11 +11,11 @@ from services.optimization_service.problem.matching_problem import MatchingProbl
 class MIPOptimizationModelBuilder(OptimizationModelBuilder):
     """Class that enables the construction of an optimization model for matching"""
 
-    def _build_variables(self, problem: MatchingProblem) -> np.ndarray:
+    def _build_variables(self, problem: MatchingProblem, engine_model: Union[LpProblem, Model]) -> np.ndarray:
         """Method to build the model decision variables, which are integer variables"""
 
         i, j = problem.matching_prospects['i'], problem.matching_prospects['j']
-        couriers_routes_vars = np.vectorize(self._build_int_bool_var, otypes=[np.object])(i, j)
+        couriers_routes_vars = np.vectorize(self._build_int_bool_var, otypes=[np.object])(i, j, engine_model)
 
         unique_routes = np.unique(j)
         supply_courier = np.array(['supply'])
@@ -22,7 +25,8 @@ class MIPOptimizationModelBuilder(OptimizationModelBuilder):
         )
         supply_routes_vars = np.vectorize(self._build_int_bool_var, otypes=[np.object])(
             supply_routes_combinations[:, 0],
-            supply_routes_combinations[:, 1]
+            supply_routes_combinations[:, 1],
+            engine_model
         )
 
         return np.concatenate((couriers_routes_vars, supply_routes_vars), axis=0)
@@ -38,8 +42,17 @@ class MIPOptimizationModelBuilder(OptimizationModelBuilder):
 
         return np.dot(variable_set, costs)
 
-    @staticmethod
-    def _build_int_bool_var(i: np.ndarray, j: np.ndarray) -> LpVariable:
+    def _build_int_bool_var(
+            self,
+            i: np.ndarray,
+            j: np.ndarray,
+            engine_model: Union[LpProblem, Model]
+    ) -> Union[LpVariable, Var]:
         """Method to build an integer boolean variable"""
 
-        return LpVariable(f'x({i}, {j})', 0, 1, LpBinary)
+        if self._optimizer == 'pulp':
+            var = LpVariable(f'x({i}, {j})', 0, 1, LpBinary)
+        else:
+            var = engine_model.addVar(lb=0, ub=1, vtype=GRB.BINARY, name=f'x({i}, {j})')
+
+        return var

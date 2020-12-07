@@ -53,6 +53,8 @@ settings = Settings({
     'VERBOSE_LOGS': False,
     # --- Optional[Union[float, int]] = Seed for running the simulation. Can be None.
     'SEED': 8795,
+    # str = Optimizer to use. Options: ['pulp', 'gurobi']
+    'OPTIMIZER': 'pulp',
 
     # Simulation Constants
     # --- time =  Simulate from this time on
@@ -94,24 +96,6 @@ settings = Settings({
     # --- str = Policy to decide if a user wants to cancel an order. Options: ['random']
     'USER_CANCELLATION_POLICY': 'random',
 
-    # Simulation Policies Configuration - Courier - Acceptance Policy
-    # --- float = Minimum acceptance rate for any courier
-    'COURIER_MIN_ACCEPTANCE_RATE': 0.4,
-    # --- float = Time [sec] that a courier waits before accepting / rejecting a notification
-    'COURIER_WAIT_TO_ACCEPT': 20,
-
-    # Simulation Policies Configuration - Courier - Movement Evaluation Policy
-    # float = Probability that a courier WILL move
-    'COURIER_MOVEMENT_PROBABILITY': 0.4,
-    #  float = Time [sec] that a courier waits before deciding to move
-    'COURIER_WAIT_TO_MOVE': min_to_sec(45),
-
-    # Simulation Policies Configuration - Courier - Other Constants
-    # float = Money earned for dropping off an order
-    'COURIER_EARNINGS_PER_ORDER': 3,
-    # float = Rate at which the courier can be compensated per hour
-    'COURIER_EARNINGS_PER_HOUR': 8,
-
     # Simulation Policies Configuration - Dispatcher - Cancellation Policy
     # float = Time [sec] to cancel an order
     'DISPATCHER_WAIT_TO_CANCEL': min_to_sec(60),
@@ -139,6 +123,24 @@ settings = Settings({
     'DISPATCHER_GEOHASH_PRECISION_GROUPING': 8,
     # float = Constant penalty for delays in the pick up of a bundle of orders
     'DISPATCHER_DELAY_PENALTY': 0.4,
+
+    # Simulation Policies Configuration - Courier - Acceptance Policy
+    # --- float = Minimum acceptance rate for any courier
+    'COURIER_MIN_ACCEPTANCE_RATE': 0.4,
+    # --- float = Time [sec] that a courier waits before accepting / rejecting a notification
+    'COURIER_WAIT_TO_ACCEPT': 20,
+
+    # Simulation Policies Configuration - Courier - Movement Evaluation Policy
+    # float = Probability that a courier WILL move
+    'COURIER_MOVEMENT_PROBABILITY': 0.4,
+    #  float = Time [sec] that a courier waits before deciding to move
+    'COURIER_WAIT_TO_MOVE': min_to_sec(45),
+
+    # Simulation Policies Configuration - Courier - Other Constants
+    # float = Money earned for dropping off an order
+    'COURIER_EARNINGS_PER_ORDER': 3,
+    # float = Rate at which the courier can be compensated per hour
+    'COURIER_EARNINGS_PER_HOUR': 8,
 
     # Simulation Policies Configuration - User - Cancellation Policy
     # float = Time [sec] that a user waits before deciding to cancel an order

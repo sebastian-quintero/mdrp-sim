@@ -713,7 +713,11 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
         self.assertEqual(len(graph.nodes), 7)
         self.assertEqual(len(graph.arcs), 13)
 
-        model_builder = GraphOptimizationModelBuilder(sense='max', model_constraints=[BalanceConstraint()])
+        model_builder = GraphOptimizationModelBuilder(
+            sense='max',
+            model_constraints=[BalanceConstraint()],
+            optimizer='pulp'
+        )
         model = model_builder.build(graph)
         self.assertTrue(model)
         self.assertEqual(len(model.constraints), len(graph.nodes))
@@ -882,7 +886,8 @@ class TestsMyopicMatchingPolicy(unittest.TestCase):
 
         model_builder = MIPOptimizationModelBuilder(
             sense='max',
-            model_constraints=[CourierAssignmentConstraint(), RouteAssignmentConstraint()]
+            model_constraints=[CourierAssignmentConstraint(), RouteAssignmentConstraint()],
+            optimizer='pulp'
         )
         model = model_builder.build(problem)
         self.assertTrue(model)

@@ -9,7 +9,6 @@ from simpy import Environment, Process
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
-import settings
 from actors.courier import Courier, COURIER_ACCEPTANCE_POLICIES_MAP, COURIER_MOVEMENT_EVALUATION_POLICIES_MAP, \
     COURIER_MOVEMENT_POLICIES_MAP
 from actors.dispatcher import Dispatcher, DISPATCHER_CANCELLATION_POLICIES_MAP, DISPATCHER_BUFFERING_POLICIES_MAP, \
@@ -21,6 +20,7 @@ from ddbb.queries.couriers_instance_data_query import couriers_query
 from ddbb.queries.orders_instance_data_query import orders_query
 from objects.location import Location
 from objects.vehicle import Vehicle
+from settings import settings
 from utils.datetime_utils import sec_to_time, time_to_query_format, time_add
 from utils.logging_utils import world_log
 
@@ -35,7 +35,7 @@ class World:
     couriers: List[Courier] = field(default_factory=lambda: list())
     dispatcher: Optional[Dispatcher] = None
     users: List[User] = field(default_factory=lambda: list())
-    process: Optional[Process] = None
+    state: Optional[Process] = None
 
     def __post_init__(self):
         """
@@ -60,7 +60,7 @@ class World:
 
     def _simulate(self):
         """
-        Process that simulates the ongoing World of the simulated environment.
+        State that simulates the ongoing World of the simulated environment.
         Each second the World checks the DDBB to see which couriers log on and which users place orders.
         A general log shows the ongoing simulation progress
         """
@@ -151,7 +151,7 @@ class World:
             self.couriers.append(courier)
 
     def post_process(self):
-        """Post process what happened in the World before calculating metrics"""
+        """Post process what happened in the World before calculating metrics for the Courier and the Order"""
 
         logging.info(f'Instance {self.instance} | Simulation finished at sim time = {sec_to_time(self.env.now)}.')
 

@@ -3,7 +3,7 @@ from typing import Optional
 
 import geohash
 
-import settings
+from settings import settings
 from objects.location import Location
 from policies.courier.movement_evaluation.courier_movement_evaluation_policy import CourierMovementEvaluationPolicy
 

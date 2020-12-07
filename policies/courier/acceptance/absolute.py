@@ -2,7 +2,7 @@ from typing import Generator, Any
 
 from simpy import Environment
 
-import settings
+from settings import settings
 from policies.courier.acceptance.courier_acceptance_policy import CourierAcceptancePolicy
 
 

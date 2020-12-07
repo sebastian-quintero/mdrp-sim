@@ -1,25 +1,38 @@
-from typing import List
+import time
+from typing import List, Tuple
 
 import numpy as np
 from haversine import haversine
 
-import settings
 from actors.courier import Courier
+from objects.matching_metric import MatchingMetric
 from objects.notification import Notification, NotificationType
 from objects.order import Order
 from objects.route import Route
 from objects.stop import Stop, StopType
 from policies.dispatcher.matching.dispatcher_matching_policy import DispatcherMatchingPolicy
 from services.osrm_service import OSRMService
+from settings import settings
 
 
 class GreedyMatchingPolicy(DispatcherMatchingPolicy):
     """Class containing the policy for the dispatcher to execute a greedy matching"""
 
-    def execute(self, orders: List[Order], couriers: List[Courier], env_time: int) -> List[Notification]:
+    def execute(
+            self,
+            orders: List[Order],
+            couriers: List[Courier],
+            env_time: int
+    ) -> Tuple[List[Notification], MatchingMetric]:
         """Implementation of the policy"""
 
-        idle_couriers = [courier for courier in couriers if courier.state == 'idle' and courier.active_route is None]
+        matching_start_time = time.time()
+
+        idle_couriers = [
+            courier
+            for courier in couriers
+            if courier.condition == 'idle' and courier.active_route is None
+        ]
         prospects = self._get_prospects(orders, idle_couriers)
         estimations = self._get_estimations(orders, idle_couriers, prospects)
 
@@ -65,7 +78,20 @@ class GreedyMatchingPolicy(DispatcherMatchingPolicy):
                     )
                     notified_couriers = np.append(notified_couriers, selected_prospect[1])
 
-        return notifications
+        matching_time = time.time() - matching_start_time
+
+        matching_metric = MatchingMetric(
+            constraints=0,
+            couriers=len(couriers),
+            matches=len(notifications),
+            matching_time=matching_time,
+            orders=len(orders),
+            routes=len(orders),
+            routing_time=0.,
+            variables=0
+        )
+
+        return notifications, matching_metric
 
     @staticmethod
     def _get_prospects(orders: List[Order], couriers: List[Courier]) -> np.ndarray:

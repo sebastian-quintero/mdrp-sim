@@ -6,7 +6,6 @@ from typing import List, Optional, Any, Dict
 from simpy import Interrupt, Event
 from simpy.events import NORMAL
 
-import settings
 from actors.actor import Actor
 from objects.location import Location
 from objects.notification import Notification, NotificationType
@@ -22,6 +21,7 @@ from policies.courier.movement.osrm import OSRMMovementPolicy
 from policies.courier.movement_evaluation.courier_movement_evaluation_policy import CourierMovementEvaluationPolicy
 from policies.courier.movement_evaluation.geohash_neighbors import NeighborsMoveEvalPolicy
 from policies.courier.movement_evaluation.still import StillMoveEvalPolicy
+from settings import settings
 from utils.datetime_utils import sec_to_time, time_diff, sec_to_hour
 
 COURIER_ACCEPTANCE_POLICIES_MAP = {
@@ -68,12 +68,12 @@ class Courier(Actor):
         self._log(f'Actor {self.courier_id} logged on')
 
         self._schedule_log_off_event()
-        self.process = self.env.process(self._idle_process())
+        self.state = self.env.process(self._idle_state())
 
-    def _idle_process(self):
-        """Process that simulates a courier being idle / waiting"""
+    def _idle_state(self):
+        """State that simulates a courier being idle / waiting"""
 
-        self.state = 'idle'
+        self.condition = 'idle'
 
         self._log(f'Courier {self.courier_id} begins idling')
 
@@ -91,11 +91,11 @@ class Courier(Actor):
             except Interrupt:
                 break
 
-    def _moving_process(self, destination: Location):
-        """Process detailing how a courier moves to a destination"""
+    def _moving_state(self, destination: Location):
+        """State detailing how a courier moves to a destination"""
 
-        self.state = 'moving'
-        process_start = sec_to_time(self.env.now)
+        self.condition = 'moving'
+        state_start = sec_to_time(self.env.now)
         self.dispatcher.courier_moving_event(courier=self)
         yield self.env.process(
             self.movement_policy.execute(
@@ -105,16 +105,16 @@ class Courier(Actor):
                 courier=self
             )
         )
-        self.utilization_time += time_diff(sec_to_time(self.env.now), process_start)
+        self.utilization_time += time_diff(sec_to_time(self.env.now), state_start)
 
-    def _picking_up_process(self, orders: Dict[int, Order]):
-        """Process that simulates a courier picking up stuff at the pick up location"""
+    def _picking_up_state(self, orders: Dict[int, Order]):
+        """State that simulates a courier picking up stuff at the pick up location"""
 
-        self.state = 'picking_up'
+        self.condition = 'picking_up'
 
-        self._log(f'Courier {self.courier_id} begins pick up process')
+        self._log(f'Courier {self.courier_id} begins pick up state')
 
-        process_start = sec_to_time(self.env.now)
+        state_start = sec_to_time(self.env.now)
 
         try:
             self.dispatcher.courier_picking_up_event(courier=self)
@@ -132,26 +132,26 @@ class Courier(Actor):
         except Interrupt:
             pass
 
-        self.utilization_time += time_diff(sec_to_time(self.env.now), process_start)
+        self.utilization_time += time_diff(sec_to_time(self.env.now), state_start)
 
-        self._log(f'Courier {self.courier_id} finishes pick up process')
+        self._log(f'Courier {self.courier_id} finishes pick up state')
 
         self.dispatcher.orders_picked_up_event(orders)
 
-    def _dropping_off_process(self, orders: Dict[int, Order]):
-        """Process that simulates a courier dropping off stuff at the drop off location"""
+    def _dropping_off_state(self, orders: Dict[int, Order]):
+        """State that simulates a courier dropping off stuff at the drop off location"""
 
-        self.state = 'dropping_off'
+        self.condition = 'dropping_off'
 
-        self._log(f'Courier {self.courier_id} begins drop off process of orders {list(orders.keys())}')
+        self._log(f'Courier {self.courier_id} begins drop off state of orders {list(orders.keys())}')
 
-        process_start = sec_to_time(self.env.now)
+        state_start = sec_to_time(self.env.now)
         self.dispatcher.courier_dropping_off_event(courier=self)
         service_time = max(order.drop_off_service_time for order in orders.values())
         yield self.env.timeout(delay=service_time)
-        self.utilization_time += time_diff(sec_to_time(self.env.now), process_start)
+        self.utilization_time += time_diff(sec_to_time(self.env.now), state_start)
 
-        self._log(f'Courier {self.courier_id} finishes drop off process of orders {list(orders.keys())}')
+        self._log(f'Courier {self.courier_id} finishes drop off state of orders {list(orders.keys())}')
 
         self.dispatcher.orders_dropped_off_event(orders=orders, courier=self)
 
@@ -164,11 +164,11 @@ class Courier(Actor):
 
             self._log(f'Courier {self.courier_id} decided to move from {self.location} to {destination}')
 
-            yield self.env.process(self._moving_process(destination))
+            yield self.env.process(self._moving_state(destination))
 
             self._log(f'Courier {self.courier_id} finished relocating and is now at {self.location}')
 
-            self.state = 'idle'
+            self.condition = 'idle'
             self.dispatcher.courier_idle_event(courier=self)
 
         else:
@@ -179,9 +179,9 @@ class Courier(Actor):
 
         self._log(f'Courier {self.courier_id} received a {notification.type.label} notification')
 
-        if self.state in ['idle', 'picking_up']:
+        if self.condition in ['idle', 'picking_up']:
             try:
-                self.process.interrupt()
+                self.state.interrupt()
 
             except:
                 pass
@@ -202,17 +202,17 @@ class Courier(Actor):
                 self.env.process(self._execute_active_route())
 
             else:
-                self.process = self.env.process(self._idle_process())
+                self.state = self.env.process(self._idle_state())
 
         else:
             self._log(f'Courier {self.courier_id} rejected a {notification.type.label} notification.')
 
             self.dispatcher.notification_rejected_event(notification=notification, courier=self)
 
-            if self.state == 'idle':
-                self.process = self.env.process(self._idle_process())
+            if self.condition == 'idle':
+                self.state = self.env.process(self._idle_state())
 
-            elif self.state == 'picking_up':
+            elif self.condition == 'picking_up':
                 self.env.process(self._execute_active_route())
 
     def log_off_event(self):
@@ -224,12 +224,12 @@ class Courier(Actor):
             self.earnings = self._calculate_earnings()
 
             try:
-                self.process.interrupt()
+                self.state.interrupt()
 
             except:
                 pass
 
-            self.state = 'logged_off'
+            self.condition = 'logged_off'
             self.dispatcher.courier_log_off_event(courier=self)
 
         else:
@@ -238,7 +238,7 @@ class Courier(Actor):
             self._log(f'Courier {self.courier_id} is scheduled to log off after completing current instructions')
 
     def _execute_stop(self, stop: Stop):
-        """Process to execute a stop"""
+        """State to execute a stop"""
 
         self.active_stop = stop
 
@@ -247,13 +247,13 @@ class Courier(Actor):
             f'with orders {list(stop.orders.keys())}, on location {stop.location}'
         )
 
-        service_process = self._picking_up_process if stop.type == StopType.PICK_UP else self._dropping_off_process
-        yield self.env.process(service_process(orders=stop.orders))
+        service_state = self._picking_up_state if stop.type == StopType.PICK_UP else self._dropping_off_state
+        yield self.env.process(service_state(orders=stop.orders))
 
         stop.visited = True
 
     def _execute_active_route(self):
-        """Process to execute the remainder of a route"""
+        """State to execute the remainder of a route"""
 
         stops_remaining = [stop for stop in self.active_route.stops if not stop.visited]
 
@@ -263,7 +263,7 @@ class Courier(Actor):
             if self.active_stop != stop:
                 self._log(f'Courier {self.courier_id} will move to next stop')
 
-                yield self.env.process(self._moving_process(destination=stop.location))
+                yield self.env.process(self._moving_state(destination=stop.location))
 
             if stop.type != StopType.PREPOSITION:
                 yield self.env.process(self._execute_stop(stop))
@@ -277,7 +277,7 @@ class Courier(Actor):
             self.log_off_event()
 
         else:
-            self.process = self.env.process(self._idle_process())
+            self.state = self.env.process(self._idle_state())
 
     def _log_off_callback(self, event: Event):
         """Callback to activate the log off event"""
@@ -314,3 +314,33 @@ class Courier(Actor):
         )
 
         return earnings
+
+    def calculate_metrics(self) -> Dict[str, Any]:
+        """Method to calculate the metrics of a courier"""
+
+        courier_delivery_earnings = len(self.fulfilled_orders) * settings.COURIER_EARNINGS_PER_ORDER
+        shift_duration = time_diff(self.off_time, self.on_time)
+
+        if shift_duration > 0:
+            courier_utilization = self.utilization_time / shift_duration
+            courier_orders_delivered_per_hour = len(self.fulfilled_orders) / sec_to_hour(shift_duration)
+            courier_bundles_picked_per_hour = len(self.accepted_notifications) / sec_to_hour(shift_duration)
+
+        else:
+            courier_utilization, courier_orders_delivered_per_hour, courier_bundles_picked_per_hour = 0, 0, 0
+
+        return {
+            'courier_id': self.courier_id,
+            'on_time': self.on_time,
+            'off_time': self.off_time,
+            'fulfilled_orders': len(self.fulfilled_orders),
+            'earnings': self.earnings,
+            'utilization_time': self.utilization_time,
+            'accepted_notifications': len(self.accepted_notifications),
+            'guaranteed_compensation': self.guaranteed_compensation,
+            'courier_utilization': courier_utilization,
+            'courier_delivery_earnings': courier_delivery_earnings,
+            'courier_compensation': self.earnings,
+            'courier_orders_delivered_per_hour': courier_orders_delivered_per_hour,
+            'courier_bundles_picked_per_hour': courier_bundles_picked_per_hour
+        }

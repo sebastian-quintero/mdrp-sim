@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from simpy import Environment
 
-import settings
+from settings import settings
 from actors.courier import Courier
 from actors.dispatcher import Dispatcher
 from actors.user import User
@@ -46,9 +46,9 @@ class TestsDispatcher(unittest.TestCase):
         del _dispatcher.unassigned_orders[_user.order.order_id]
         _dispatcher.assigned_orders[_user.order.order_id] = _user.order
 
-    @patch('settings.USER_CANCELLATION_PROBABILITY', 0)
-    @patch('settings.USER_WAIT_TO_CANCEL', min_to_sec(10))
-    @patch('settings.DISPATCHER_WAIT_TO_CANCEL', min_to_sec(15))
+    @patch('settings.settings.USER_CANCELLATION_PROBABILITY', 0)
+    @patch('settings.settings.USER_WAIT_TO_CANCEL', min_to_sec(10))
+    @patch('settings.settings.DISPATCHER_WAIT_TO_CANCEL', min_to_sec(15))
     def test_cancel_order_event(self):
         """Test to verify how the dispatcher cancels an order after certain time"""
 
@@ -88,11 +88,11 @@ class TestsDispatcher(unittest.TestCase):
                     timedelta(seconds=settings.DISPATCHER_WAIT_TO_CANCEL)
             ).time()
         )
-        self.assertEqual(user.state, 'canceled')
+        self.assertEqual(user.condition, 'canceled')
 
-    @patch('settings.USER_CANCELLATION_PROBABILITY', 0)
-    @patch('settings.USER_WAIT_TO_CANCEL', min_to_sec(44))
-    @patch('settings.DISPATCHER_WAIT_TO_CANCEL', min_to_sec(55))
+    @patch('settings.settings.USER_CANCELLATION_PROBABILITY', 0)
+    @patch('settings.settings.USER_WAIT_TO_CANCEL', min_to_sec(44))
+    @patch('settings.settings.DISPATCHER_WAIT_TO_CANCEL', min_to_sec(55))
     def test_order_not_canceled(self):
         """
         Test to verify that the dispatcher doesn't cancel an order if it has a courier assigned.
@@ -130,7 +130,7 @@ class TestsDispatcher(unittest.TestCase):
         self.assertIsNone(user.order.cancellation_time)
         self.assertEqual(dispatcher.assigned_orders, {self.order_id: user.order})
         self.assertEqual(dispatcher.unassigned_orders, {})
-        self.assertEqual(user.state, 'waiting')
+        self.assertEqual(user.condition, 'waiting')
 
     def test_order_submitted_event(self):
         """Test to verify the mechanics of the order submitted event"""
@@ -174,7 +174,7 @@ class TestsDispatcher(unittest.TestCase):
         self.assertEqual(order.state, 'picked_up')
         self.assertEqual(order.pick_up_time, sec_to_time(initial_time))
 
-    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    @patch('settings.settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
     def test_orders_dropped_off_event(self):
         """Test to verify the mechanics of orders being dropped off"""
 
@@ -224,7 +224,7 @@ class TestsDispatcher(unittest.TestCase):
         )
         dispatcher.unassigned_orders[order.order_id] = order
         courier = Courier(dispatcher=dispatcher, env=env, courier_id=89, on_time=on_time, off_time=off_time)
-        courier.state = 'idle'
+        courier.condition = 'idle'
         notification = Notification(
             courier=courier,
             instruction=instruction
@@ -241,7 +241,7 @@ class TestsDispatcher(unittest.TestCase):
         self.assertEqual(courier.active_route, instruction)
         self.assertEqual(dispatcher.unassigned_orders, {})
 
-    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    @patch('settings.settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
     def test_notification_rejected_event(self):
         """Test to verify the mechanics of a notification being rejected by a courier"""
 
@@ -281,7 +281,7 @@ class TestsDispatcher(unittest.TestCase):
         self.assertIn(courier.courier_id, order.rejected_by)
         self.assertIn(order.order_id, courier.rejected_orders)
 
-    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    @patch('settings.settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
     def test_courier_idle_event(self, *args):
         """Test to verifiy the mechanics of how a courier is set to idle by the dispatcher"""
 
@@ -342,10 +342,10 @@ class TestsDispatcher(unittest.TestCase):
         env = Environment(initial_time=initial_time)
         dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
 
-        # Creates a courier and sets it to the picking process
+        # Creates a courier and sets it to the picking state
         courier = Courier(dispatcher=dispatcher, env=env, courier_id=32, on_time=on_time, off_time=off_time)
         dispatcher.idle_couriers = {courier.courier_id: courier}
-        env.process(courier._picking_up_process(
+        env.process(courier._picking_up_state(
             orders={
                 21: Order(drop_off_service_time=service_time, ready_time=time(14, 20, 0))
             }
@@ -353,7 +353,7 @@ class TestsDispatcher(unittest.TestCase):
         env.run(until=initial_time + min_to_sec(10))
 
         # Verify courier properties are modified and it is allocated correctly
-        self.assertEqual(courier.state, 'picking_up')
+        self.assertEqual(courier.condition, 'picking_up')
         self.assertIn(courier.courier_id, dispatcher.picking_up_couriers.keys())
         self.assertEqual(dispatcher.idle_couriers, {})
 
@@ -372,21 +372,21 @@ class TestsDispatcher(unittest.TestCase):
         # Verifies 2 test cases for how the courier transitions to being busy
         # For each test case, assert the courier starts in a set and ends up in the busy set
 
-        # Test 1: courier starts dropping off process
+        # Test 1: courier starts dropping off state
         env = Environment(initial_time=initial_time)
         dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
         courier = Courier(dispatcher=dispatcher, env=env, courier_id=courier_id, on_time=on_time, off_time=off_time)
-        env.process(courier._dropping_off_process(
+        env.process(courier._dropping_off_state(
             orders={
                 21: Order(drop_off_service_time=service_time, ready_time=time(12, 20, 0))
             }
         ))
         env.run(until=initial_time + time_delta)
-        self.assertEqual(courier.state, 'dropping_off')
+        self.assertEqual(courier.condition, 'dropping_off')
         self.assertEqual(dispatcher.dropping_off_couriers, {courier.courier_id: courier})
         self.assertEqual(dispatcher.idle_couriers, {})
 
-        # Test 2: courier start moving process
+        # Test 2: courier start moving state
         env = Environment(initial_time=initial_time)
         dispatcher = Dispatcher(env=env, matching_policy=DummyMatchingPolicy())
         courier = Courier(
@@ -397,14 +397,14 @@ class TestsDispatcher(unittest.TestCase):
             on_time=on_time,
             off_time=off_time
         )
-        env.process(courier._moving_process(destination=Location(lat=4.689697, lng=-74.055495)))
+        env.process(courier._moving_state(destination=Location(lat=4.689697, lng=-74.055495)))
         env.run(until=initial_time + time_delta)
-        self.assertEqual(courier.state, 'moving')
+        self.assertEqual(courier.condition, 'moving')
         self.assertEqual(dispatcher.moving_couriers, {courier.courier_id: courier})
         self.assertEqual(dispatcher.idle_couriers, {})
 
-    @patch('settings.DISPATCHER_WAIT_TO_CANCEL', min_to_sec(55))
-    @patch('settings.USER_WAIT_TO_CANCEL', min_to_sec(44))
+    @patch('settings.settings.DISPATCHER_WAIT_TO_CANCEL', min_to_sec(55))
+    @patch('settings.settings.USER_WAIT_TO_CANCEL', min_to_sec(44))
     def test_buffer_event(self):
         """Test to verify how the mechanics of the dispatcher buffering orders work"""
 
@@ -449,7 +449,7 @@ class TestsDispatcher(unittest.TestCase):
         env.run(until=initial_time + time_delta)
         self.assertEqual(len(dispatcher.unassigned_orders), 3)
 
-    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    @patch('settings.settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
     def test_courier_log_off(self):
         """Test to verify how the dispatcher handles a courier logging off"""
 
@@ -489,8 +489,8 @@ class TestsDispatcher(unittest.TestCase):
             on_time=time(12, 0, 0),
             off_time=time(13, 0, 0)
         )
-        courier.process.interrupt()
-        env.process(courier._dropping_off_process(
+        courier.state.interrupt()
+        env.process(courier._dropping_off_state(
             orders={21: Order(drop_off_service_time=service_time)}
         ))
         env.run(until=initial_time + time_delta)
@@ -510,8 +510,8 @@ class TestsDispatcher(unittest.TestCase):
             on_time=time(12, 0, 0),
             off_time=time(13, 0, 0)
         )
-        courier.process.interrupt()
-        env.process(courier._picking_up_process(
+        courier.state.interrupt()
+        env.process(courier._picking_up_state(
             orders={
                 21: Order(drop_off_service_time=service_time, ready_time=time(12, 20, 0))
             }
@@ -551,7 +551,7 @@ class TestsDispatcher(unittest.TestCase):
         self.assertIsNotNone(courier.active_route)
         self.assertEqual(courier.active_route, instruction)
 
-    @patch('settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
+    @patch('settings.settings.COURIER_MOVEMENT_PROBABILITY', 0.01)
     def test_prepositioning_notification_rejected_event(self):
         """Test to verify the mechanics of a prepositioning notification being rejected by a courier"""
 

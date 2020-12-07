@@ -17,7 +17,7 @@ from tests.test_utils import mocked_get_route
 class TestsGreedyMatchingPolicy(unittest.TestCase):
     """Tests for the greedy matching policy class"""
 
-    @patch('settings.DISPATCHER_PROSPECTS_MAX_DISTANCE', 5)
+    @patch('settings.settings.DISPATCHER_PROSPECTS_MAX_DISTANCE', 5)
     def test_get_prospects(self):
         """Test to verify how prospects are obtained"""
 
@@ -111,7 +111,7 @@ class TestsGreedyMatchingPolicy(unittest.TestCase):
             )
         )
 
-    @patch('settings.DISPATCHER_PROSPECTS_MAX_DISTANCE', 8)
+    @patch('settings.settings.DISPATCHER_PROSPECTS_MAX_DISTANCE', 8)
     @patch('services.osrm_service.OSRMService.get_route', side_effect=mocked_get_route)
     def test_execute(self, osrm):
         """Test the full functionality of the greedy matching policy"""
@@ -131,16 +131,16 @@ class TestsGreedyMatchingPolicy(unittest.TestCase):
             on_time=on_time,
             off_time=off_time,
             vehicle=Vehicle.CAR,
-            state='idle'
+            condition='idle'
         )
         courier_2 = Courier(
             location=Location(4.678622, -74.055694),
             on_time=on_time,
             off_time=off_time,
             vehicle=Vehicle.CAR,
-            state='idle'
+            condition='idle'
         )
-        notifications = policy.execute(orders=[order], couriers=[courier_1, courier_2], env_time=3)
+        notifications, _ = policy.execute(orders=[order], couriers=[courier_1, courier_2], env_time=3)
         self.assertEqual(len(notifications), 1)
         self.assertEqual(notifications[0].courier, courier_2)
         self.assertIn(order, notifications[0].instruction.orders.values())
@@ -164,7 +164,7 @@ class TestsGreedyMatchingPolicy(unittest.TestCase):
             on_time=on_time,
             off_time=off_time,
             vehicle=Vehicle.CAR,
-            state='idle',
+            condition='idle',
             courier_id=1
         )
         courier_2 = Courier(
@@ -172,10 +172,10 @@ class TestsGreedyMatchingPolicy(unittest.TestCase):
             on_time=on_time,
             off_time=off_time,
             vehicle=Vehicle.CAR,
-            state='idle',
+            condition='idle',
             courier_id=2
         )
-        notifications = policy.execute(orders=[order_1, order_2], couriers=[courier_1, courier_2], env_time=4)
+        notifications, _ = policy.execute(orders=[order_1, order_2], couriers=[courier_1, courier_2], env_time=4)
         self.assertEqual(len(notifications), 2)
         self.assertEqual(notifications[0].courier, courier_1)
         self.assertIn(order_1, notifications[0].instruction.orders.values())
@@ -198,10 +198,10 @@ class TestsGreedyMatchingPolicy(unittest.TestCase):
             on_time=on_time,
             off_time=off_time,
             vehicle=Vehicle.CAR,
-            state='idle',
+            condition='idle',
             courier_id=1
         )
-        notifications = policy.execute(orders=[order_1, order_2], couriers=[courier], env_time=5)
+        notifications, _ = policy.execute(orders=[order_1, order_2], couriers=[courier], env_time=5)
         self.assertEqual(len(notifications), 1)
         self.assertEqual(notifications[0].courier, courier)
         self.assertIn(order_1, notifications[0].instruction.orders.values())

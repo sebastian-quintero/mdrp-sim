@@ -2,7 +2,7 @@ import random
 
 from simpy import Environment
 
-import settings
+from settings import settings
 from actors.world import World
 from services.metrics_service import MetricsService
 from utils.datetime_utils import time_to_sec

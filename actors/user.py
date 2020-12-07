@@ -5,13 +5,13 @@ from typing import Optional
 from simpy import Interrupt, Event
 from simpy.events import NORMAL
 
-import settings
 from actors.actor import Actor
 from actors.dispatcher import Dispatcher
 from objects.location import Location
 from objects.order import Order
 from policies.user.cancellation.random import RandomCancellationPolicy
 from policies.user.cancellation.user_cancellation_policy import UserCancellationPolicy
+from settings import settings
 
 USER_CANCELLATION_POLICIES_MAP = {
     'random': RandomCancellationPolicy()
@@ -33,12 +33,12 @@ class User(Actor):
 
         self._log(f'Actor {self.user_id} logged on')
 
-        self.process = self.env.process(self._idle_process())
+        self.state = self.env.process(self._idle_state())
 
-    def _idle_process(self):
-        """Process that simulates a user being idle"""
+    def _idle_state(self):
+        """State that simulates a user being idle"""
 
-        self.state = 'idle'
+        self.condition = 'idle'
 
         self._log(f'New user begins idling')
 
@@ -49,10 +49,10 @@ class User(Actor):
             except Interrupt:
                 break
 
-    def _waiting_process(self):
-        """Process simulating the user is waiting for the order"""
+    def _waiting_state(self):
+        """State simulating the user is waiting for the order"""
 
-        self.state = 'waiting'
+        self.condition = 'waiting'
 
         self._log(f'User with order {self.order.order_id} begins waiting')
 
@@ -87,8 +87,8 @@ class User(Actor):
 
         self._log(f'The user submitted the order {order.order_id}')
 
-        self.process.interrupt()
-        self.process = self.env.process(self._waiting_process())
+        self.state.interrupt()
+        self.state = self.env.process(self._waiting_state())
         self.dispatcher.order_submitted_event(order, preparation_time, ready_time)
         self._schedule_evaluate_cancellation_event()
 
@@ -109,15 +109,15 @@ class User(Actor):
         self._log(f'The user decided to cancel the order {self.order.order_id}')
 
         self.dispatcher.cancel_order_event(order=self.order)
-        self.process.interrupt()
+        self.state.interrupt()
 
     def order_dropped_off_event(self, order_id: int):
         """Event detailing how the user gets the order delivered"""
 
         self._log(f'The user has the order {order_id} dropped off.')
 
-        self.process.interrupt()
-        self.state = 'dropped_off'
+        self.state.interrupt()
+        self.condition = 'dropped_off'
 
     def _schedule_evaluate_cancellation_event(self):
         """Method that allows the user to schedule the cancellation evaluation event"""

@@ -1,4 +1,4 @@
-import settings
+from settings import settings
 from policies.dispatcher.buffering.dispatcher_buffering_policy import DispatcherBufferingPolicy
 
 

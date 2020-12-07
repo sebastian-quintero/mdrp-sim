@@ -1,13 +1,14 @@
 import math
+import time
 from collections import defaultdict
-from typing import List, Iterable, Optional, Dict
+from typing import List, Iterable, Optional, Dict, Tuple
 
 import numpy as np
 from geohash import encode
 from haversine import haversine
 
-import settings
 from actors.courier import Courier
+from objects.matching_metric import MatchingMetric
 from objects.notification import Notification, NotificationType
 from objects.order import Order
 from objects.route import Route
@@ -20,10 +21,11 @@ from services.optimization_service.model.constraints.courier_assignment_constrai
 from services.optimization_service.model.constraints.route_assignment_constraint import RouteAssignmentConstraint
 from services.optimization_service.model.graph_model_builder import GraphOptimizationModelBuilder
 from services.optimization_service.model.mip_model_builder import MIPOptimizationModelBuilder
-from services.optimization_service.model.optimization_model import SOLUTION_VALUE
+from services.optimization_service.model.optimization_model import SOLUTION_VALUE, OptimizationModel
 from services.optimization_service.problem.matching_problem import MatchingProblem
 from services.optimization_service.problem.matching_problem_builder import MatchingProblemBuilder
 from services.osrm_service import OSRMService
+from settings import settings
 from utils.datetime_utils import time_to_sec, sec_to_time, time_diff
 
 GRAPH_MODEL_BUILDER = GraphOptimizationModelBuilder(
@@ -47,10 +49,19 @@ class MyopicMatchingPolicy(DispatcherMatchingPolicy):
         self._notification_filtering = notification_filtering
         self._mip_matcher = mip_matcher
 
-    def execute(self, orders: Iterable[Order], couriers: List[Courier], env_time: int) -> List[Notification]:
+    def execute(
+            self,
+            orders: List[Order],
+            couriers: List[Courier],
+            env_time: int
+    ) -> Tuple[List[Notification], MatchingMetric]:
         """Implementation of the policy where routes are first calculated and later assigned"""
 
+        routing_start_time = time.time()
         routes = self._generate_routes(orders, couriers, env_time)
+        routing_time = time.time() - routing_start_time
+
+        matching_start_time = time.time()
         prospects = self._generate_matching_prospects(routes, couriers, env_time)
 
         if bool(prospects.tolist()):
@@ -67,10 +78,29 @@ class MyopicMatchingPolicy(DispatcherMatchingPolicy):
             solution = model.solve()
             notifications = self._process_solution(solution, problem, env_time)
 
-            return notifications
-
         else:
-            return []
+            model = OptimizationModel(
+                variable_set=np.array([]),
+                objective=np.array([]),
+                constraints=[],
+                sense=''
+            )
+            notifications = []
+
+        matching_time = time.time() - matching_start_time
+
+        matching_metric = MatchingMetric(
+            constraints=len(model.constraints),
+            couriers=len(couriers),
+            matches=len(notifications),
+            matching_time=matching_time,
+            orders=len(orders),
+            routes=len(routes),
+            routing_time=routing_time,
+            variables=len(model.variable_set)
+        )
+
+        return notifications, matching_metric
 
     def _generate_routes(self, orders: Iterable[Order], couriers: Iterable[Courier], env_time: int) -> List[Route]:
         """Method to generate routes, also known as bundles"""
@@ -96,14 +126,14 @@ class MyopicMatchingPolicy(DispatcherMatchingPolicy):
         courier_routes, courier_ids, num_idle_couriers = [], [], 0
         for courier in couriers:
             if (
-                    courier.state == 'idle' and
+                    courier.condition == 'idle' and
                     haversine(courier.location.coordinates, orders[0].pick_up_at.coordinates) <=
                     settings.DISPATCHER_PROSPECTS_MAX_DISTANCE
             ):
                 num_idle_couriers += 1
 
             elif self._assignment_updates and (
-                    courier.state == 'picking_up' and
+                    courier.condition == 'picking_up' and
                     encode(
                         courier.location.lat,
                         courier.location.lng,
@@ -139,7 +169,7 @@ class MyopicMatchingPolicy(DispatcherMatchingPolicy):
             )
 
         else:
-            couriers = [courier for courier in couriers if courier.state == 'idle']
+            couriers = [courier for courier in couriers if courier.condition == 'idle']
             num_couriers = len(couriers)
             num_routes = len(routes)
             couriers_indices = np.arange(num_couriers)
@@ -232,7 +262,7 @@ class MyopicMatchingPolicy(DispatcherMatchingPolicy):
             for order in orders
             if time_to_sec(order.ready_time) <= env_time + settings.DISPATCHER_MYOPIC_READY_TIME_SLACK
         ])
-        num_couriers = len([courier for courier in couriers if courier.state == 'idle'])
+        num_couriers = len([courier for courier in couriers if courier.condition == 'idle'])
 
         return max(math.ceil(num_orders / num_couriers), 1) if num_couriers > 0 else 1
 
@@ -272,8 +302,8 @@ class MyopicMatchingPolicy(DispatcherMatchingPolicy):
             else True
         )
         courier_state_condition = (
-                courier.state == 'idle' or
-                (courier.state == 'picking_up' and route.initial_prospect == courier.courier_id)
+                courier.condition == 'idle' or
+                (courier.condition == 'picking_up' and route.initial_prospect == courier.courier_id)
         )
 
         return distance_condition and stop_offset_condition and courier_state_condition
@@ -325,7 +355,7 @@ class MyopicMatchingPolicy(DispatcherMatchingPolicy):
 
             for ix, (courier_ix, route_ix) in enumerate(matched_prospects):
                 courier, route = matching_problem.couriers[courier_ix], matching_problem.routes[route_ix]
-                instruction = route.stops[1:] if courier.state == 'picking_up' else route
+                instruction = route.stops[1:] if courier.condition == 'picking_up' else route
 
                 notifications[ix] = Notification(
                     courier=courier,
@@ -338,7 +368,7 @@ class MyopicMatchingPolicy(DispatcherMatchingPolicy):
 
             for ix, (courier_ix, route_ix) in enumerate(matched_prospects):
                 courier, route = matching_problem.couriers[courier_ix], matching_problem.routes[route_ix]
-                instruction = route.stops[1:] if courier.state == 'picking_up' else route
+                instruction = route.stops[1:] if courier.condition == 'picking_up' else route
                 notification = Notification(
                     courier=courier,
                     instruction=instruction,
@@ -350,10 +380,10 @@ class MyopicMatchingPolicy(DispatcherMatchingPolicy):
                     vehicle=courier.vehicle
                 )
 
-                if isinstance(instruction, list) and courier.state == 'picking_up':
+                if isinstance(instruction, list) and courier.condition == 'picking_up':
                     notifications.append(notification)
 
-                elif courier.state == 'idle':
+                elif courier.condition == 'idle':
                     if route.time_since_ready(env_time) > settings.DISPATCHER_PROSPECTS_MAX_READY_TIME:
                         notifications.append(notification)
 

@@ -3,7 +3,7 @@
 This is a Meal Delivery Routing Problem Simulator (hence the name).
 If you're in a hurry, check out:
 - [Quick Setup](#quick-setup)
-- [Quick Use](#quick-use)
+- [Use](#use)
 
 If you have a bit more time on your hands, start reading from the [Intro](#intro) and work your way down. 
 
@@ -59,7 +59,7 @@ python3 ddbb/load_instances.py
 
 If the terminal logs showed all instances were loaded to the DDBB and the connection was disposed, you're good to go.
 
-## Quick Use
+## Use
 
 Stand in the root of the project.
 
@@ -89,6 +89,9 @@ export PYTHONPATH=.
 python3 simulate.py
 ```
 
+5 - Check your local DDBB for the results in the following tables: `order_metrics`, `courier_metrics`, `matching_optimization_metrics`.
+Go to the [DDBB](#ddbb) section for more information on queries.
+
 ## Intro
 
 This project is a computational framework for solving the Meal Delivery Routing Problem. 
@@ -97,7 +100,7 @@ Discrete events simulation is used and these are the most important definitions:
 
 - Event: A sequence of items, facts, actions or changes triggered at a moment in time that follow a chronological order.
 - Actor: Entity that makes decisions and executes actions (triggers events).
-- Process: Current state of an actor. Can also be defined as a sequence of events during a specific time interval.
+- State: Current condition of an actor. Can also be defined as a sequence of events during a specific time interval.
 - Policy: Conditions and algorithms that describe how an actor makes a decision or executes an action.
 - Object: Passive entity used to represent an abstract object, person or place. Doesn't make decisions or execute actions.
 
@@ -139,7 +142,7 @@ Here you can find the classes that handle the MDRP's actors states and events:
 - Dispatcher
 - World (passive actor that does not take actions and thus lacks policies, being used for orchestration only)
 
-These are the events, processes and policies that can be tested for each actor and the corresponding state transition diagrams.
+These are the events, states and policies that can be tested for each actor and the corresponding state transition diagrams.
 
 #### User
 
@@ -151,9 +154,9 @@ These are the events, processes and policies that can be tested for each actor a
     - Cancel order event: details the actions taken by a user to cancel an order.
     - Order dropped off: details the actions taken by a user when the order is dropped off.
 
-- Processes
-    - Idle process: passive actor state before submitting a new order.
-    - Waiting process: state in which the user is waiting for the order to be dropped off.
+- States
+    - Idle state: passive actor state before submitting a new order.
+    - Waiting state: state in which the user is waiting for the order to be dropped off.
 
 - Policies
     - Cancellation policy: establishes how a user decides to cancel an order.
@@ -164,15 +167,15 @@ These are the events, processes and policies that can be tested for each actor a
 
 - Events
     - Evaluate movement event: details how the courier decides if it should move (incorporates the movement evaluation policy).
-    - Move event: details the actions taken by the courier to move somewhere (incorporates the moving process and movement policy).
-    - Notification event: details how a courier handles a new notification (incorporates the acceptance policy and subsequently the picking up and dropping off processes).
+    - Move event: details the actions taken by the courier to move somewhere (incorporates the moving state and movement policy).
+    - Notification event: details how a courier handles a new notification (incorporates the acceptance policy and subsequently the picking up and dropping off statees).
     - Log off event: details how the courier logs off of the system (includes earnings calculations).
 
-- Processes
-    - Idle process: stand-by process of the courier. After moving and executing notifications, the courier always comes back to this process.
-    - Moving process: establishes how the courier moves from an origin to a destination.
-    - Picking up process: details the actions taken by a courier for picking up orders.
-    - Dropping off process: details the actions taken by a courier for dropping off orders.
+- States
+    - Idle state: stand-by state of the courier. After moving and executing notifications, the courier always comes back to this state.
+    - Moving state: establishes how the courier moves from an origin to a destination.
+    - Picking up state: details the actions taken by a courier for picking up orders.
+    - Dropping off state: details the actions taken by a courier for dropping off orders.
 
 - Policies
     - Movement evaluation policy: establishes how a courier decides if and where it wants to relocate.
@@ -195,8 +198,8 @@ These are the events, processes and policies that can be tested for each actor a
     - Evaluate prepositioning event: details the actions taken by the dispatcher to consider executing a prepositioning cycle.
     - Update / Control event: the dispatcher has the faculty of controlling an updating the system based on what is happening. As such, it is in charge of updating user, order and courier properties.
 
-- Processes
-    - Listening process: the sole process of the dispatcher, since the role of this actor is to react and coordinate system changes.
+- States
+    - Listening state: the sole state of the dispatcher, since the role of this actor is to react and coordinate system changes.
 
 - Policies
     - Cancellation policy: establishes how the dispatcher decides to cancel an order.
@@ -206,11 +209,160 @@ These are the events, processes and policies that can be tested for each actor a
     - Prepositioning evaluation: establishes how the dispatcher decides if prepositioning should be done and how often.
 
 
-### DataBase (DDBB)
-All scripts and migrations necessary for the DDBB to work live here.
+### DDBB
+All scripts and migrations necessary for the Data Base (DDBB) to work live here.
+Here is an explanation of the tables and queries you can use, for exploring both the inputs and the outputs of the simulation.
+
+#### orders_instance_data
+Information for the input of the simulator, regarding orders.
+
+With this query you can have an overview:
+```sql
+SELECT *
+FROM orders_intance_data
+LIMIT 10
+```
+
+With this query you can get all the orders for a specific instance
+```sql
+SELECT *
+FROM orders_instance_data
+WHERE instance_id = $instance_id
+```
+
+Description of columns loaded to this table can be found in [Instances](#instances).
+
+#### couriers_instance_data
+Information for the input of the simulator, regarding couriers.
+
+With this query you can have an overview:
+```sql
+SELECT *
+FROM couriers_instance_data
+LIMIT 10
+```
+
+With this query you can get all the couriers for a specific instance:
+```sql
+SELECT *
+FROM couriers_instance_data
+WHERE instance_id = $instance_id
+```
+
+#### order_metrics
+Results of a simulation, regarding orders. 
+Many columns from the `orders_instance_data` can be found here for traceability.
+Here are interesting columns in this table:
+
+- `simulation_settings`: JSON containing information of the simulation configuration
+- `simulation_policies`: JSON containing the policies used in the simulation.
+- `extra_settings`: JSON containing all other inputs of the simulation.
+- `dropped_of`: Boolean stating if an order was dropped off or otherwise canceled.
+
+Some Float columns with the corresponding metrics are (for an order that dropped off):
+
+- `click_to_door_time`
+- `click_to_taken_time`
+- `ready_to_door_time`
+- `ready_to_pick_up_time`
+- `in_store_to_pick_up_time`
+- `drop_off_lateness_time`
+
+If an order was canceled, the column `click_to_cancel_time` will contain the cancellation time.
+Other columns for obtaining these metrics are available.
+
+With this query you can get the metrics for orders in a specific instance, that were delivered:
+```sql
+SELECT order_id, click_to_door_time, click_to_taken_time, ready_to_door_time, in_store_to_pick_up_time, drop_off_lateness_time
+FROM order_metrics
+WHERE instance_id = $instance_id AND dropped_off
+```
+
+With this query you can get the metrics for orders in a specific instance, with particular policies, that were canceled:
+```sql
+SELECT order_id, click_to_door_time, click_to_taken_time, ready_to_door_time, in_store_to_pick_up_time, drop_off_lateness_time
+FROM order_metrics
+WHERE
+    instance_id = $instance_id AND
+    dropped_off AND
+    simulation_policies ->> 'DISPATCHER_MATCHING_POLICY' LIKE 'mdrp' AND
+    simulation_policies ->> 'COURIER_ACCEPTANCE_POLICY' LIKE 'uniform'
+```
+
+#### courier_metrics
+Results of a simulation, regarding couriers. 
+Many columns from the `couriers_instance_data` can be found here for traceability.
+Here are interesting columns in this table:
+
+- `simulation_settings`: JSON containing information of the simulation configuration
+- `simulation_policies`: JSON containing the policies used in the simulation.
+- `extra_settings`: JSON containing all other inputs of the simulation.
+
+Some Float columns with the corresponding metrics are:
+
+- `courier_utilization`
+- `courier_delivery_earnings`
+- `courier_compensation`
+- `courier_orders_delivered_per_hour`
+- `courier_bundles_picked_per_hour`
+
+Other columns for obtaining these metrics are available.
+
+With this query you can get the metrics for couriers in a specific instance:
+```sql
+SELECT courier_id, courier_utilization, courier_delivery_earnings, courier_compensation, courier_orders_delivered_per_hour, courier_bundles_picked_per_hour
+FROM courier_metrics
+WHERE instance_id = $instance_id
+```
+
+With this query you can get the metrics for couriers in a specific instance, with particular policies:
+```sql
+SELECT courier_id, courier_utilization, courier_delivery_earnings, courier_compensation, courier_orders_delivered_per_hour, courier_bundles_picked_per_hour
+FROM courier_metrics
+WHERE
+    instance_id = $instance_id AND
+    simulation_policies ->> 'DISPATCHER_MATCHING_POLICY' LIKE 'modified_mdrp' AND
+    simulation_policies ->> 'COURIER_MOVEMENT_EVALUATION_POLICY' LIKE 'neighbors'
+```
+
+#### matching_optimization_metrics
+Results of a simulation, regarding matches obtained during various moments of the simulation. 
+Here are interesting columns in this table:
+
+- `simulation_settings`: JSON containing information of the simulation configuration
+- `simulation_policies`: JSON containing the policies used in the simulation.
+- `extra_settings`: JSON containing all other inputs of the simulation.
+
+Other Integer and Float columns with data of the optimization problem solved are:
+
+- `orders`
+- `routes`
+- `couriers`
+- `variables`
+- `constraints`
+- `routing_time`
+- `matching_time`
+- `matches`
+
+With this query you can get the metrics for optimizations in a specific instance:
+```sql
+SELECT id, orders, routes, couriers, variables, constraints, routing_time, matching_time, matches
+FROM matching_optimization_metrics
+WHERE instance_id = $instance_id
+```
+
+With this query you can get the metrics for optimizations in a specific instance, with particular policies:
+```sql
+SELECT id, orders, routes, couriers, variables, constraints, routing_time, matching_time, matches
+FROM matching_optimization_metrics
+WHERE
+    instance_id = $instance_id AND
+    simulation_policies ->> 'DISPATCHER_MATCHING_POLICY' LIKE 'modified_mdrp' AND
+    simulation_policies ->> 'COURIER_MOVEMENT_EVALUATION_POLICY' LIKE 'neighbors'
+```
 
 ### Docker
-Files for managing docker stuff.
+Files for managing docker stuff. Two containers are used: managing the DDBB and the OSRM service.
 
 ### Instances
 Here the different instances for testing out the `mdrp-sim` can be found. 
@@ -235,6 +387,8 @@ the `orders.csv` file contains information about all the orders processed during
 - preparation_time: timestamp detailing when the order starts being prepared.
 - ready_time: timestamp detailing when the order is ready to be picked up.
 - expected_drop_off_time: timestamp detailing when the order should be dropped off.
+
+In the DDBB, the tables `couriers_instance_data` and `orders_instance_data` contain the information for the different instances.
 
 ### Objects
 The different class objects used for the MDRP can be found here, such as:

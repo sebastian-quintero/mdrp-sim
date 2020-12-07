@@ -5,9 +5,9 @@ from typing import Dict, Optional, List, Tuple
 from simpy import Interrupt, Event
 from simpy.events import NORMAL
 
-import settings
 from actors.actor import Actor
 from actors.courier import Courier
+from objects.matching_metric import MatchingMetric
 from objects.notification import Notification, NotificationType
 from objects.order import Order
 from objects.route import Route
@@ -24,6 +24,7 @@ from policies.dispatcher.prepositioning.naive import NaivePrepositioningPolicy
 from policies.dispatcher.prepositioning_evaluation.dispatcher_prepositioning_evaluation_policy import \
     DispatcherPrepositioningEvaluationPolicy
 from policies.dispatcher.prepositioning_evaluation.fixed import FixedPrepositioningEvaluationPolicy
+from settings import settings
 from utils.datetime_utils import sec_to_time, time_diff, time_add
 
 DISPATCHER_CANCELLATION_POLICIES_MAP = {
@@ -92,12 +93,13 @@ class Dispatcher(Actor):
     moving_couriers: Dict[int, Courier] = field(default_factory=lambda: dict())
     picking_up_couriers: Dict[int, Courier] = field(default_factory=lambda: dict())
 
+    matching_metrics: List[MatchingMetric] = field(default_factory=lambda: list())
     notifications: List[Notification] = field(default_factory=lambda: list())
 
-    def _idle_process(self):
-        """Process that simulates the dispatcher listening for events"""
+    def _idle_state(self):
+        """State that simulates the dispatcher listening for events"""
 
-        self.state = 'listening'
+        self.condition = 'listening'
 
         self._log('Dispatcher is listening')
 
@@ -180,7 +182,7 @@ class Dispatcher(Actor):
 
             order.cancellation_time = sec_to_time(self.env.now)
             order.state = 'canceled'
-            order.user.state = 'canceled'
+            order.user.condition = 'canceled'
             self.canceled_orders[order.order_id] = order
 
         self._log(f'Dispatcher canceled the order {order.order_id}')
@@ -209,7 +211,7 @@ class Dispatcher(Actor):
         self._log(f'Attempting dispatch of {len(orders)} orders and {len(couriers)} couriers.')
 
         if bool(orders) and bool(couriers):
-            notifications = self.matching_policy.execute(
+            notifications, matching_metric = self.matching_policy.execute(
                 orders=list(orders),
                 couriers=list(couriers.values()),
                 env_time=self.env.now
@@ -226,6 +228,7 @@ class Dispatcher(Actor):
             for notification in notifications:
                 if notification.instruction is not None and notification.courier is not None:
                     self.notifications.append(notification)
+                    self.matching_metrics.append(matching_metric)
                     self.env.process(couriers[notification.courier.courier_id].notification_event(notification))
 
     def _prepositioning_event(self):
@@ -245,7 +248,8 @@ class Dispatcher(Actor):
                     notification.type = NotificationType.PREPOSITIONING
                     self.notifications.append(notification)
                     self.env.process(
-                        self.idle_couriers[notification.courier.courier_id].notification_event(notification))
+                        self.idle_couriers[notification.courier.courier_id].notification_event(notification)
+                    )
 
     def _evaluate_prepositioning_event(self):
         """Event detailing how the dispatcher evaluates if it should flush the buffer and begin dispatching"""
@@ -261,7 +265,7 @@ class Dispatcher(Actor):
 
         self._log(
             f'Dispatcher will handle acceptance of a {notification.type.label} notification '
-            f'from courier {courier.courier_id} (state = {courier.state})'
+            f'from courier {courier.courier_id} (condition = {courier.condition})'
         )
 
         if notification.type == NotificationType.PREPOSITIONING:
@@ -309,7 +313,7 @@ class Dispatcher(Actor):
                 )
                 self._log(
                     f'Dispatcher will handle acceptance of orders {order_ids} '
-                    f'from courier {courier.courier_id} (state = {courier.state}). '
+                    f'from courier {courier.courier_id} (condition = {courier.condition}). '
                     f'Instruction is a {"Route" if isinstance(notification.instruction, Route) else "List[Stop]"}'
                 )
 
@@ -328,10 +332,10 @@ class Dispatcher(Actor):
                     order.courier_id = courier.courier_id
                     self.assigned_orders[order_id] = order
 
-                if courier.state == 'idle' and isinstance(notification.instruction, Route):
+                if courier.condition == 'idle' and isinstance(notification.instruction, Route):
                     courier.active_route = notification.instruction
 
-                elif courier.state == 'picking_up' and isinstance(notification.instruction, list):
+                elif courier.condition == 'picking_up' and isinstance(notification.instruction, list):
                     for stop in notification.instruction:
                         for order_id, order in stop.orders.items():
                             courier.active_route.orders[order_id] = order
@@ -358,13 +362,13 @@ class Dispatcher(Actor):
 
         self._log(
             f'Dispatcher will handle rejection of a {notification.type.label} notification '
-            f'from courier {courier.courier_id} (state = {courier.state})'
+            f'from courier {courier.courier_id} (condition = {courier.condition})'
         )
 
         if notification.type == NotificationType.PICK_UP_DROP_OFF:
             self._log(
                 f'Dispatcher will handle rejection of orders {list(notification.instruction.orders.keys())} '
-                f'from courier {courier.courier_id} (state = {courier.state}). '
+                f'from courier {courier.courier_id} (condition = {courier.condition}). '
                 f'Instruction is a {"Route" if isinstance(notification.instruction, Route) else "Stop"}'
             )
 
